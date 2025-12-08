@@ -95,8 +95,9 @@ export default function VendorListPage() {
       queryClient.invalidateQueries({ queryKey: ['vendors'] });
       showToast('Vendor deleted successfully!', 'success');
     },
-    onError: () => {
-      showToast('Failed to delete vendor', 'error');
+    onError: (error: any) => {
+      const errorMessage = error?.response?.data?.message || 'Failed to delete vendor';
+      showToast(errorMessage, 'error');
     },
   });
 

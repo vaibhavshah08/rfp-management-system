@@ -12,11 +12,7 @@ import {
   Chip,
   Grid,
   Divider,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  OutlinedInput,
+  Autocomplete,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -532,9 +528,8 @@ export default function CreateRfpPage() {
     updateRfp({ id: currentRfp.id, description: trimmed });
   };
 
-  const handleVendorChange = (event: any) => {
-    const value = event.target.value;
-    setSelectedVendors(typeof value === "string" ? value.split(",") : value);
+  const handleVendorChange = (_event: any, newValue: Vendor[]) => {
+    setSelectedVendors(newValue.map((v) => v.id));
   };
 
   const handleSendRfp = () => {
@@ -910,52 +905,54 @@ export default function CreateRfpPage() {
               </Alert>
             ) : (
               <>
-                <FormControl fullWidth sx={{ mb: 2 }}>
-                  <InputLabel id="vendor-select-label">
-                    Select Vendors
-                  </InputLabel>
-                  <Select
-                    labelId="vendor-select-label"
-                    id="vendor-select"
-                    multiple
-                    value={selectedVendors}
-                    onChange={handleVendorChange}
-                    input={<OutlinedInput label="Select Vendors" />}
-                    renderValue={(selected) => (
-                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-                        {selected.map((value) => {
-                          const vendor = vendors.find((v) => v.id === value);
-                          return vendor ? (
-                            <Chip
-                              key={value}
-                              label={vendor.name}
-                              onDelete={() => {
-                                setSelectedVendors(
-                                  selectedVendors.filter((id) => id !== value)
-                                );
-                              }}
-                              onMouseDown={(event) => {
-                                event.stopPropagation();
-                              }}
-                            />
-                          ) : null;
-                        })}
+                <Autocomplete
+                  multiple
+                  fullWidth
+                  disablePortal
+                  id="vendor-autocomplete"
+                  options={vendors}
+                  value={vendors.filter((v) => selectedVendors.includes(v.id))}
+                  onChange={handleVendorChange}
+                  disabled={emailSent}
+                  getOptionLabel={(option) => option.name}
+                  renderOption={(props, option) => (
+                    <li {...props} key={option.id}>
+                      <Box>
+                        <Typography variant="body1">{option.name}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {option.email}
+                        </Typography>
                       </Box>
-                    )}
-                    disabled={emailSent}
-                  >
-                    {vendors.map((vendor) => (
-                      <MenuItem key={vendor.id} value={vendor.id}>
-                        <Box>
-                          <Typography variant="body1">{vendor.name}</Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {vendor.email}
-                          </Typography>
-                        </Box>
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                    </li>
+                  )}
+                  renderTags={(tagValue, getTagProps) =>
+                    tagValue.map((option, index) => (
+                      <Chip
+                        {...getTagProps({ index })}
+                        key={option.id}
+                        label={option.name}
+                        onMouseDown={(event) => {
+                          // prevent input from losing focus when clicking chip
+                          event.stopPropagation();
+                        }}
+                      />
+                    ))
+                  }
+                  sx={{ mb: 2 }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Select Vendors"
+                      placeholder="Start typing vendor name or email..."
+                    />
+                  )}
+                  ListboxProps={{
+                    style: {
+                      maxHeight: 300,
+                      overflow: "auto",
+                    },
+                  }}
+                />
 
                 <Divider sx={{ my: 2 }} />
 
