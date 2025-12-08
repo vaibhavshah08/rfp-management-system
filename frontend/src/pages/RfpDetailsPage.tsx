@@ -1,5 +1,5 @@
-import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useParams, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import {
   Box,
   Typography,
@@ -11,51 +11,82 @@ import {
   Alert,
   Card,
   CardContent,
-} from '@mui/material';
-import { CompareArrows as CompareIcon } from '@mui/icons-material';
-import { rfpApi, proposalApi } from '../services/api';
-import type { Rfp, Proposal } from '../types';
+} from "@mui/material";
+import { CompareArrows as CompareIcon } from "@mui/icons-material";
+import { rfpApi, proposalApi } from "../services/api";
+import type { Rfp, Proposal } from "../types";
 
 export default function RfpDetailsPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const { data: rfp, isLoading } = useQuery<Rfp>({
-    queryKey: ['rfp', id],
+  const {
+    data: rfp,
+    isLoading: rfpLoading,
+    isError: rfpError,
+  } = useQuery<Rfp>({
+    queryKey: ["rfp", id],
     queryFn: async () => {
-      const response = await rfpApi.getById(id!);
-      return response.data;
+      if (!id) throw new Error("RFP ID is required");
+      try {
+        const response = await rfpApi.getById(id);
+        return response?.data;
+      } catch (error: any) {
+        throw new Error(error?.response?.data?.message || "Failed to load RFP");
+      }
     },
     enabled: !!id,
   });
 
-  const { data: proposals = [] } = useQuery<Proposal[]>({
-    queryKey: ['proposals', id],
+  const {
+    data: proposals = [],
+    isLoading: proposalsLoading,
+    isError: proposalsError,
+  } = useQuery<Proposal[]>({
+    queryKey: ["proposals", id],
     queryFn: async () => {
-      const response = await proposalApi.getByRfpId(id!);
-      return response.data;
+      if (!id) throw new Error("RFP ID is required");
+      try {
+        const response = await proposalApi.getByRfpId(id);
+        return response?.data || [];
+      } catch (error: any) {
+        console.error("Error loading proposals:", error);
+        return [];
+      }
     },
     enabled: !!id,
   });
 
-
-  if (isLoading) {
+  if (rfpLoading || proposalsLoading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+      <Box sx={{ display: "flex", justifyContent: "center", p: 4 }}>
         <CircularProgress />
       </Box>
     );
   }
 
-  if (!rfp) {
-    return <Alert severity="error">RFP not found</Alert>;
+  if (rfpError || !rfp) {
+    return (
+      <Box sx={{ p: 2 }}>
+        <Alert severity="error">
+          {rfpError ? "Failed to load RFP. Please try again." : "RFP not found"}
+        </Alert>
+      </Box>
+    );
   }
 
-  const { structured_data } = rfp;
+  const structured_data = rfp?.structured_data;
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          mb: 3,
+        }}
+      >
         <Typography variant="h4">RFP Details</Typography>
         {proposals.length > 0 && (
           <Button
@@ -82,7 +113,7 @@ export default function RfpDetailsPage() {
           Structured Information
         </Typography>
 
-        {structured_data.budget && (
+        {structured_data?.budget && (
           <Box sx={{ mb: 2 }}>
             <Typography variant="subtitle2" color="text.secondary">
               Budget
@@ -93,7 +124,7 @@ export default function RfpDetailsPage() {
           </Box>
         )}
 
-        {structured_data.items && structured_data.items.length > 0 && (
+        {structured_data?.items && structured_data.items.length > 0 && (
           <Box sx={{ mb: 2 }}>
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>
               Items Required
@@ -102,12 +133,12 @@ export default function RfpDetailsPage() {
               <Card key={index} sx={{ mb: 1 }}>
                 <CardContent>
                   <Typography variant="body1" fontWeight="bold">
-                    {item.name}
+                    {item?.name || "Unnamed Item"}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Quantity: {item.quantity}
+                    Quantity: {item?.quantity ?? "N/A"}
                   </Typography>
-                  {item.specifications && (
+                  {item?.specifications && (
                     <Typography variant="body2" sx={{ mt: 1 }}>
                       {item.specifications}
                     </Typography>
@@ -118,25 +149,29 @@ export default function RfpDetailsPage() {
           </Box>
         )}
 
-        {structured_data.delivery_timeline && (
+        {structured_data?.delivery_timeline && (
           <Box sx={{ mb: 2 }}>
             <Typography variant="subtitle2" color="text.secondary">
               Delivery Timeline
             </Typography>
-            <Typography variant="body1">{structured_data.delivery_timeline}</Typography>
+            <Typography variant="body1">
+              {structured_data.delivery_timeline}
+            </Typography>
           </Box>
         )}
 
-        {structured_data.payment_terms && (
+        {structured_data?.payment_terms && (
           <Box sx={{ mb: 2 }}>
             <Typography variant="subtitle2" color="text.secondary">
               Payment Terms
             </Typography>
-            <Typography variant="body1">{structured_data.payment_terms}</Typography>
+            <Typography variant="body1">
+              {structured_data.payment_terms}
+            </Typography>
           </Box>
         )}
 
-        {structured_data.warranty && (
+        {structured_data?.warranty && (
           <Box sx={{ mb: 2 }}>
             <Typography variant="subtitle2" color="text.secondary">
               Warranty
@@ -145,7 +180,7 @@ export default function RfpDetailsPage() {
           </Box>
         )}
 
-        {structured_data.category && (
+        {structured_data?.category && (
           <Box>
             <Chip label={structured_data.category} color="primary" />
           </Box>
@@ -156,38 +191,60 @@ export default function RfpDetailsPage() {
         <Typography variant="h6" gutterBottom>
           Proposals Received ({proposals.length})
         </Typography>
+        {proposalsError && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            Failed to load some proposal data. Some information may be
+            incomplete.
+          </Alert>
+        )}
         {proposals.length === 0 ? (
           <Alert severity="info">No proposals received yet.</Alert>
         ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {proposals.map((proposal) => (
-              <Card key={proposal.id}>
+              <Card key={proposal?.id}>
                 <CardContent>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "start",
+                    }}
+                  >
                     <Box>
-                      <Typography variant="h6">{proposal.vendor?.name}</Typography>
+                      <Typography variant="h6">
+                        {proposal?.vendor?.name || "Unknown Vendor"}
+                      </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        {proposal.vendor?.email}
+                        {proposal?.vendor?.email || "No email"}
                       </Typography>
                     </Box>
-                    {proposal.score !== undefined && (
-                      <Chip
-                        label={`Score: ${proposal.score.toFixed(1)}`}
-                        color={proposal.score >= 70 ? 'success' : proposal.score >= 50 ? 'warning' : 'error'}
-                      />
-                    )}
+                    {proposal?.score !== undefined &&
+                      proposal.score !== null && (
+                        <Chip
+                          label={`Score: ${proposal.score.toFixed(1)}`}
+                          color={
+                            proposal.score >= 70
+                              ? "success"
+                              : proposal.score >= 50
+                                ? "warning"
+                                : "error"
+                          }
+                        />
+                      )}
                   </Box>
-                  {proposal.structured_proposal.price && (
+                  {proposal?.structured_proposal?.price && (
                     <Typography variant="h6" color="primary" sx={{ mt: 1 }}>
                       ${proposal.structured_proposal.price.toLocaleString()}
                     </Typography>
                   )}
-                  {proposal.structured_proposal.delivery_days && (
+                  {proposal?.structured_proposal?.delivery_days && (
                     <Typography variant="body2" sx={{ mt: 1 }}>
-                      Delivery: {proposal.structured_proposal.delivery_days} days
+                      Delivery: {proposal.structured_proposal.delivery_days}{" "}
+                      days
                     </Typography>
                   )}
-                  {proposal.ai_summary && (
+                  {proposal?.ai_summary && (
                     <Typography variant="body2" sx={{ mt: 1 }}>
                       {proposal.ai_summary}
                     </Typography>
@@ -201,5 +258,3 @@ export default function RfpDetailsPage() {
     </Box>
   );
 }
-
-

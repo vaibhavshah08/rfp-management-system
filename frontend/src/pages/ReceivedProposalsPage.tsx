@@ -39,16 +39,28 @@ export default function ReceivedProposalsPage() {
   const navigate = useNavigate();
   const [previewProposal, setPreviewProposal] = useState<Proposal | null>(null);
 
-  const { data: proposals = [], isLoading, isError } = useQuery<Proposal[]>({
+  const {
+    data: proposals = [],
+    isLoading,
+    isError,
+  } = useQuery<Proposal[]>({
     queryKey: ["proposals"],
     queryFn: async () => {
-      const response = await proposalApi.getAll();
-      return response.data;
+      try {
+        const response = await proposalApi.getAll();
+        return response?.data || [];
+      } catch (error: any) {
+        console.error("Error loading proposals:", error);
+        throw new Error(
+          error?.response?.data?.message || "Failed to load proposals"
+        );
+      }
     },
   });
 
   const proposals_by_rfp = proposals.reduce((acc, proposal) => {
-    const rfp_id = proposal.rfp_id;
+    const rfp_id = proposal?.rfp_id;
+    if (!rfp_id) return acc;
     if (!acc[rfp_id]) {
       acc[rfp_id] = [];
     }
@@ -132,28 +144,35 @@ export default function ReceivedProposalsPage() {
                             <TableCell sx={{ py: 0.5, fontSize: "0.75rem" }}>
                               <Box>
                                 <Typography variant="body2" fontWeight="medium">
-                                  {proposal.vendor?.name || "Unknown Vendor"}
+                                  {proposal?.vendor?.name || "Unknown Vendor"}
                                 </Typography>
                                 <Typography variant="caption" color="text.secondary">
-                                  {proposal.vendor?.email}
+                                  {proposal?.vendor?.email || "No email"}
                                 </Typography>
                               </Box>
                             </TableCell>
                             <TableCell sx={{ py: 0.5, fontSize: "0.75rem" }} align="right">
-                              {proposal.structured_proposal.price
+                              {proposal?.structured_proposal?.price
                                 ? `$${proposal.structured_proposal.price.toLocaleString()}`
                                 : "N/A"}
                             </TableCell>
                             <TableCell sx={{ py: 0.5, fontSize: "0.75rem" }} align="right">
-                              {proposal.structured_proposal.delivery_days
+                              {proposal?.structured_proposal?.delivery_days
                                 ? `${proposal.structured_proposal.delivery_days} days`
                                 : "N/A"}
                             </TableCell>
                             <TableCell sx={{ py: 0.5 }}>
-                              {proposal.score !== undefined ? (
+                              {proposal?.score !== undefined &&
+                              proposal.score !== null ? (
                                 <Chip
                                   label={proposal.score.toFixed(1)}
-                                  color={proposal.score >= 70 ? "success" : proposal.score >= 50 ? "warning" : "error"}
+                                  color={
+                                    proposal.score >= 70
+                                      ? "success"
+                                      : proposal.score >= 50
+                                        ? "warning"
+                                        : "error"
+                                  }
                                   size="small"
                                 />
                               ) : (
@@ -189,17 +208,17 @@ export default function ReceivedProposalsPage() {
             <Box>
               <Box sx={{ mb: 2 }}>
                 <Typography variant="h6" gutterBottom>
-                  {previewProposal.vendor?.name || "Unknown Vendor"}
+                  {previewProposal?.vendor?.name || "Unknown Vendor"}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  {previewProposal.vendor?.email}
+                  {previewProposal?.vendor?.email || "No email"}
                 </Typography>
               </Box>
 
               <Divider sx={{ my: 2 }} />
 
               <Grid container spacing={2} sx={{ mb: 2 }}>
-                {previewProposal.structured_proposal.price && (
+                {previewProposal?.structured_proposal?.price && (
                   <Grid item xs={6}>
                     <Typography variant="caption" color="text.secondary">
                       Price
@@ -209,7 +228,7 @@ export default function ReceivedProposalsPage() {
                     </Typography>
                   </Grid>
                 )}
-                {previewProposal.structured_proposal.delivery_days && (
+                {previewProposal?.structured_proposal?.delivery_days && (
                   <Grid item xs={6}>
                     <Typography variant="caption" color="text.secondary">
                       Delivery
@@ -219,7 +238,7 @@ export default function ReceivedProposalsPage() {
                     </Typography>
                   </Grid>
                 )}
-                {previewProposal.structured_proposal.warranty && (
+                {previewProposal?.structured_proposal?.warranty && (
                   <Grid item xs={6}>
                     <Typography variant="caption" color="text.secondary">
                       Warranty
@@ -229,7 +248,8 @@ export default function ReceivedProposalsPage() {
                     </Typography>
                   </Grid>
                 )}
-                {previewProposal.structured_proposal.completeness !== undefined && (
+                {previewProposal?.structured_proposal?.completeness !== undefined &&
+                previewProposal.structured_proposal.completeness !== null && (
                   <Grid item xs={6}>
                     <Typography variant="caption" color="text.secondary">
                       Completeness
@@ -239,7 +259,8 @@ export default function ReceivedProposalsPage() {
                     </Typography>
                   </Grid>
                 )}
-                {previewProposal.score !== undefined && (
+                {previewProposal?.score !== undefined &&
+                previewProposal.score !== null && (
                   <Grid item xs={6}>
                     <Typography variant="caption" color="text.secondary">
                       Score
@@ -251,44 +272,56 @@ export default function ReceivedProposalsPage() {
                 )}
               </Grid>
 
-              {previewProposal.structured_proposal.items && previewProposal.structured_proposal.items.length > 0 && (
+              {previewProposal?.structured_proposal?.items &&
+              previewProposal.structured_proposal.items.length > 0 && (
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="subtitle2" gutterBottom>
                     Items
                   </Typography>
-                  {previewProposal.structured_proposal.items.map((item: any, idx: number) => (
-                    <Typography key={idx} variant="body2" sx={{ mb: 0.5 }}>
-                      • {item.name} - Quantity: {item.quantity}
-                      {item.unit_price && ` - $${item.unit_price.toLocaleString()}/unit`}
-                      {item.total_price && ` (Total: $${item.total_price.toLocaleString()})`}
-                    </Typography>
-                  ))}
+                  {previewProposal.structured_proposal.items.map(
+                    (item: any, idx: number) => (
+                      <Typography key={idx} variant="body2" sx={{ mb: 0.5 }}>
+                        • {item?.name || "Item"} - Quantity: {item?.quantity || 0}
+                        {item?.unit_price &&
+                          ` - $${item.unit_price.toLocaleString()}/unit`}
+                        {item?.total_price &&
+                          ` (Total: $${item.total_price.toLocaleString()})`}
+                      </Typography>
+                    )
+                  )}
                 </Box>
               )}
 
-              {previewProposal.structured_proposal.notes && (
+              {previewProposal?.structured_proposal?.notes && (
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="subtitle2" gutterBottom>
                     Notes
                   </Typography>
-                  <Typography variant="body2">{previewProposal.structured_proposal.notes}</Typography>
+                  <Typography variant="body2">
+                    {previewProposal.structured_proposal.notes}
+                  </Typography>
                 </Box>
               )}
 
-              {previewProposal.ai_summary && (
+              {previewProposal?.ai_summary && (
                 <Box sx={{ mb: 2 }}>
                   <Divider sx={{ my: 2 }} />
                   <Typography variant="subtitle2" gutterBottom>
                     AI Summary
                   </Typography>
-                  <Typography variant="body2">{previewProposal.ai_summary}</Typography>
+                  <Typography variant="body2">
+                    {previewProposal.ai_summary}
+                  </Typography>
                 </Box>
               )}
 
               <Divider sx={{ my: 2 }} />
 
               <Typography variant="caption" color="text.secondary">
-                RFP: {previewProposal.rfp?.description_raw || previewProposal.rfp_id}
+                RFP:{" "}
+                {previewProposal?.rfp?.description_raw ||
+                  previewProposal?.rfp_id ||
+                  "Unknown"}
               </Typography>
             </Box>
           )}

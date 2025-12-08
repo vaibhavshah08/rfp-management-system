@@ -25,6 +25,7 @@ import {
 } from "@mui/material";
 import { Preview as PreviewIcon } from "@mui/icons-material";
 import { emailApi, rfpApi } from "../services/api";
+import { useToast } from "../contexts/ToastContext";
 
 interface EmailRecord {
   id: string;
@@ -56,6 +57,7 @@ const generateSummary = (text: string): string => {
 };
 
 export default function SentProposalsPage() {
+  const { showToast } = useToast();
   const [previewRfpId, setPreviewRfpId] = useState<string | null>(null);
   const [previewData, setPreviewData] = useState<any>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
@@ -69,17 +71,28 @@ export default function SentProposalsPage() {
   });
 
   const handlePreview = async (rfp_id: string) => {
+    if (!rfp_id) {
+      showToast("Invalid RFP ID", "error");
+      return;
+    }
     setPreviewRfpId(rfp_id);
     setLoadingPreview(true);
+    setPreviewData(null);
     try {
-      const response = await rfpApi.getById(rfp_id);
-      const previewResponse = await rfpApi.getEmailPreview(rfp_id);
+      const [rfpResponse, previewResponse] = await Promise.all([
+        rfpApi.getById(rfp_id),
+        rfpApi.getEmailPreview(rfp_id),
+      ]);
       setPreviewData({
-        rfp: response.data,
-        emailPreview: previewResponse.data,
+        rfp: rfpResponse?.data,
+        emailPreview: previewResponse?.data,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to load preview", error);
+      const error_message =
+        error?.response?.data?.message || "Failed to load preview";
+      showToast(error_message, "error");
+      setPreviewData(null);
     } finally {
       setLoadingPreview(false);
     }
@@ -239,7 +252,7 @@ export default function SentProposalsPage() {
                 Description
               </Typography>
               <Typography variant="body2" paragraph>
-                {previewData.rfp.description_raw}
+                {previewData?.rfp?.description_raw || "No description"}
               </Typography>
 
               <Divider sx={{ my: 2 }} />
@@ -248,7 +261,7 @@ export default function SentProposalsPage() {
                 Structured Data
               </Typography>
               <Grid container spacing={2} sx={{ mb: 2 }}>
-                {previewData.rfp.structured_data.budget && (
+                {previewData?.rfp?.structured_data?.budget && (
                   <Grid item xs={6}>
                     <Typography variant="caption" color="text.secondary">
                       Budget
@@ -258,7 +271,7 @@ export default function SentProposalsPage() {
                     </Typography>
                   </Grid>
                 )}
-                {previewData.rfp.structured_data.delivery_timeline && (
+                {previewData?.rfp?.structured_data?.delivery_timeline && (
                   <Grid item xs={6}>
                     <Typography variant="caption" color="text.secondary">
                       Delivery Timeline
@@ -268,7 +281,7 @@ export default function SentProposalsPage() {
                     </Typography>
                   </Grid>
                 )}
-                {previewData.rfp.structured_data.payment_terms && (
+                {previewData?.rfp?.structured_data?.payment_terms && (
                   <Grid item xs={6}>
                     <Typography variant="caption" color="text.secondary">
                       Payment Terms
@@ -278,7 +291,7 @@ export default function SentProposalsPage() {
                     </Typography>
                   </Grid>
                 )}
-                {previewData.rfp.structured_data.warranty && (
+                {previewData?.rfp?.structured_data?.warranty && (
                   <Grid item xs={6}>
                     <Typography variant="caption" color="text.secondary">
                       Warranty
@@ -290,17 +303,20 @@ export default function SentProposalsPage() {
                 )}
               </Grid>
 
-              {previewData.rfp.structured_data.items && previewData.rfp.structured_data.items.length > 0 && (
+              {previewData?.rfp?.structured_data?.items &&
+              previewData.rfp.structured_data.items.length > 0 && (
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="subtitle2" gutterBottom>
                     Items Required
                   </Typography>
-                  {previewData.rfp.structured_data.items.map((item: any, idx: number) => (
-                    <Typography key={idx} variant="body2" sx={{ mb: 0.5 }}>
-                      • {item.name} - Quantity: {item.quantity}
-                      {item.specifications && ` (${item.specifications})`}
-                    </Typography>
-                  ))}
+                  {previewData.rfp.structured_data.items.map(
+                    (item: any, idx: number) => (
+                      <Typography key={idx} variant="body2" sx={{ mb: 0.5 }}>
+                        • {item?.name || "Item"} - Quantity: {item?.quantity || 0}
+                        {item?.specifications && ` (${item.specifications})`}
+                      </Typography>
+                    )
+                  )}
                 </Box>
               )}
 
@@ -309,21 +325,34 @@ export default function SentProposalsPage() {
               <Typography variant="h6" gutterBottom>
                 Email Preview
               </Typography>
-              <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
-                Subject: {previewData.emailPreview.subject}
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                display="block"
+                gutterBottom
+              >
+                Subject: {previewData?.emailPreview?.subject || "No subject"}
               </Typography>
-              <Box
-                sx={{
-                  border: "1px solid #ddd",
-                  borderRadius: "4px",
-                  p: 2,
-                  maxHeight: "400px",
-                  overflow: "auto",
-                  bgcolor: "#fff",
-                  mt: 1,
-                }}
-                dangerouslySetInnerHTML={{ __html: previewData.emailPreview.html }}
-              />
+              {previewData?.emailPreview?.html ? (
+                <Box
+                  sx={{
+                    border: "1px solid #ddd",
+                    borderRadius: "4px",
+                    p: 2,
+                    maxHeight: "400px",
+                    overflow: "auto",
+                    bgcolor: "#fff",
+                    mt: 1,
+                  }}
+                  dangerouslySetInnerHTML={{
+                    __html: previewData.emailPreview.html,
+                  }}
+                />
+              ) : (
+                <Alert severity="info" sx={{ mt: 1 }}>
+                  Email preview not available
+                </Alert>
+              )}
             </Box>
           ) : null}
         </DialogContent>

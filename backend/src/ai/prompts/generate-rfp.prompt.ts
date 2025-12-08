@@ -22,8 +22,10 @@ Your job is to accurately extract and professionally rephrase the information in
 4. items (array)  
    For each item or service mentioned, extract:
    - name: A clear, professional item name (capitalize properly; use standard terminology).
-   - quantity: numeric value (default to 1 only if explicitly implies single unit; otherwise null).
+   - quantity: MUST be a numeric value (number). If quantity is not explicitly mentioned but a single unit is implied, use 1. If quantity truly cannot be determined, DO NOT include that item in the array. Never return null for quantity.
    - specifications: Convert informal details into professional technical specifications. Rephrase thoroughly.
+   
+   CRITICAL: Only include items in the array where you can determine BOTH name and quantity. If quantity is missing or unclear, exclude that item entirely rather than including it with null quantity.
 
 5. quantities  
    - A mapping of item names to quantities (if quantities were mentioned).  
@@ -89,7 +91,7 @@ If these are missing → return null values for most fields.
 ------------------------------------------------------------------------------------
 
 OUTPUT FORMAT (STRICT):
-You must return ONLY valid JSON in this EXACT shape:
+You must return ONLY valid JSON in this EXACT shape. Do NOT include markdown code blocks, explanations, or any text before or after the JSON:
 
 {
   "budget": number | null,
@@ -97,21 +99,55 @@ You must return ONLY valid JSON in this EXACT shape:
   "budget_per_unit": number | null,
   "items": [
     {
-      "name": string,
+      "name": "string",
       "quantity": number,
-      "specifications": string | null
+      "specifications": "string" | null
     }
   ],
-  "quantities": {string: number},
-  "delivery_timeline": string | null,
-  "payment_terms": string | null,
-  "warranty": string | null,
-  "special_requests": string | null,
-  "category": string | null,
-  "metadata": object | null
+  "quantities": {},
+  "delivery_timeline": "string" | null,
+  "payment_terms": "string" | null,
+  "warranty": "string" | null,
+  "special_requests": "string" | null,
+  "category": "string" | null,
+  "metadata": {} | null
 }
 
-If a field cannot be determined, set it to null.  
-Arrays and objects should be empty rather than null where appropriate.
+CRITICAL JSON RULES:
+1. Start with { and end with } - no other text before or after
+2. All string values MUST be in double quotes: "value" (not single quotes)
+3. All property names MUST be in double quotes: "budget" (not budget)
+4. Use commas to separate properties, but NO trailing comma after the last property
+5. Use null (not "null" as string, not undefined, not empty string) for missing values
+6. For arrays, use [] if empty, not null
+7. For objects, use {} if empty, not null
+8. Escape special characters in strings: use \\ for backslash, \" for quote, \\n for newline
 
-Ensure the final response is valid JSON with NO additional commentary, explanation, markdown formatting, or text outside the JSON object.`;
+IMPORTANT: In the "items" array:
+- "quantity" MUST always be a number (never null, never undefined, never missing, never a string)
+- If you cannot determine a quantity for an item, DO NOT include that item in the array
+- Only include items where both "name" and "quantity" can be determined
+- If no items can be determined with quantities, return an empty array: []
+
+EXAMPLE OF VALID JSON OUTPUT:
+{
+  "budget": 100000,
+  "budget_currency": "INR",
+  "budget_per_unit": null,
+  "items": [
+    {
+      "name": "Laptop",
+      "quantity": 10,
+      "specifications": "Minimum 16GB RAM, 512GB SSD"
+    }
+  ],
+  "quantities": {},
+  "delivery_timeline": "Delivery expected within 14 calendar days from order confirmation.",
+  "payment_terms": "Payment method: Credit card accepted.",
+  "warranty": null,
+  "special_requests": null,
+  "category": "IT equipment",
+  "metadata": null
+}
+
+Return ONLY the JSON object, nothing else. No markdown, no code blocks, no explanations.`;

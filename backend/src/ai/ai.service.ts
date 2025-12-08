@@ -34,6 +34,7 @@ export class AiService {
   }
 
   async generateStructuredRfp(description: string): Promise<RfpStructure> {
+    let raw_content: string | null = null;
     try {
       const prompt = `${GENERATE_RFP_PROMPT}\n\nUser description: ${description}\n\nReturn ONLY valid JSON, no other text.`;
 
@@ -42,17 +43,47 @@ export class AiService {
         contents: prompt,
       });
 
-      const content = response.text;
+      const content = response.text || '';
+      raw_content = content;
       if (!content) {
         throw new Error('No response from Gemini');
       }
 
-      const json_match = content.match(/\{[\s\S]*\}/);
-      const json_content = json_match ? json_match[0] : content;
+      let json_content = content.trim();
+
+      if (json_content.startsWith('```json')) {
+        json_content = json_content
+          .replace(/^```json\s*/, '')
+          .replace(/\s*```$/, '');
+      } else if (json_content.startsWith('```')) {
+        json_content = json_content
+          .replace(/^```\s*/, '')
+          .replace(/\s*```$/, '');
+      }
+
+      const json_match = json_content.match(/\{[\s\S]*\}/);
+      if (json_match) {
+        json_content = json_match[0];
+      }
+
+      json_content = json_content.trim();
+
+      if (!json_content.startsWith('{') || !json_content.endsWith('}')) {
+        throw new Error(
+          'Invalid JSON format: response does not start with { or end with }',
+        );
+      }
+
       const parsed = JSON.parse(json_content);
       return RfpStructureSchema.parse(parsed);
     } catch (error) {
       this.logger.error('Error generating structured RFP', error);
+      if (error instanceof SyntaxError && raw_content) {
+        this.logger.error(
+          'JSON parsing error. Raw response:',
+          raw_content.substring(0, 500),
+        );
+      }
       throw new Error(`Failed to generate structured RFP: ${error.message}`);
     }
   }

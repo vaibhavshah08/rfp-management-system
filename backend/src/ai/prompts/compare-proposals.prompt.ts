@@ -76,13 +76,24 @@ You must return ONLY valid JSON with no extra text, comments, or explanations, i
 }
 
 Where:
-- "summary" is a single string containing a clear, comprehensive comparison of all proposals, highlighting key differences, strengths, and weaknesses.
+- "summary" is a single string containing a clear, comprehensive comparison of all proposals in a structured format suitable for display. Highlight key differences, strengths, and weaknesses. Use bullet points or clear sections if helpful for readability.
 - "scores" is an object whose keys are the actual vendor IDs taken from the input (for example, "123", "vendor_a", etc.).
   - "score" is a number between 0 and 100 (you may use integers or decimals).
-  - "reasoning" briefly explains why that vendor received that score (touch on price, delivery, warranty, completeness, and value).
+  - "reasoning" should be concise and structured, briefly explaining why that vendor received that score. Touch on price, delivery, warranty, completeness, and value in a clear, scannable format.
 - "recommended_vendor.vendor_id" must be set to the vendor_id of the vendor you recommend overall.
-- "recommended_vendor.reason" must explain clearly and concisely why this vendor is recommended, referencing major factors such as price, delivery, warranty, and overall value.
+- "recommended_vendor.reason" must be a comprehensive, actionable explanation that clearly answers "Which vendor should I go with, and why?". This should:
+  - Start with a clear statement: "We recommend [Vendor Name] because..."
+  - Provide a detailed breakdown of why this vendor is the best choice
+  - Compare key advantages over other vendors (price competitiveness, delivery speed, warranty coverage, additional services, payment flexibility, etc.)
+  - Highlight unique value propositions (e.g., "offers 20% discount", "includes free installation", "provides extended warranty")
+  - Address potential concerns or trade-offs if applicable
+  - Be written in a format that helps the buyer make an informed decision
+  - Be 3-5 sentences long, providing enough detail to justify the recommendation
+- Preference order for scoring is: Price, Warranty, Value for money, Services Provided, Delivery timeline, Maintenance Included or not, Customer Support, Payment Terms, completeness of the proposal etc.
+- Do not judge over price directly - see for other factors and also see what additional features or services a particular vendor is providing.
+- The recommendation should consider the overall best value proposition, not just the lowest price.
 
+If Currency is not mentioned, use INR.
 Do NOT add any extra fields to the JSON.
 Do NOT output anything outside of the JSON object.
 Ensure the JSON is syntactically valid and can be parsed by a standard JSON parser.`;

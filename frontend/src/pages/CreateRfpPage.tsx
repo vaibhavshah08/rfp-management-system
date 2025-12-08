@@ -76,25 +76,50 @@ export default function CreateRfpPage() {
   } = useQuery<Vendor[]>({
     queryKey: ["vendors"],
     queryFn: async () => {
-      const response = await vendorApi.getAll();
-      return response.data;
+      try {
+        const response = await vendorApi.getAll();
+        return response?.data || [];
+      } catch (error: any) {
+        console.error("Error loading vendors:", error);
+        throw new Error(
+          error?.response?.data?.message || "Failed to load vendors"
+        );
+      }
     },
   });
 
-  const { data: draftData } = useQuery<Rfp>({
+  const {
+    data: draftData,
+    isLoading: draftLoading,
+    isError: draftError,
+  } = useQuery<Rfp | null>({
     queryKey: ["draft", draftId],
     queryFn: async () => {
       if (!draftId) return null;
-      const response = await rfpApi.getById(draftId);
-      return response.data;
+      try {
+        const response = await rfpApi.getById(draftId);
+        return response?.data || null;
+      } catch (error: any) {
+        console.error("Error loading draft:", error);
+        throw new Error(
+          error?.response?.data?.message || "Failed to load draft"
+        );
+      }
     },
     enabled: !!draftId,
   });
 
   useEffect(() => {
+    if (draftError) {
+      showToast("Failed to load draft", "error");
+      return;
+    }
+    if (draftLoading) {
+      return;
+    }
     if (draftData && draftData.is_draft) {
       setCurrentDraft(draftData);
-      setDescription(draftData.description_raw);
+      setDescription(draftData?.description_raw || "");
       setHasUnsavedChanges(false);
 
       const hasStructuredData =
@@ -696,6 +721,16 @@ export default function CreateRfpPage() {
       {vendorsError && (
         <Alert severity="error" sx={{ mb: 2 }}>
           Failed to load vendors. Please refresh the page.
+        </Alert>
+      )}
+      {draftLoading && (
+        <Box sx={{ display: "flex", justifyContent: "center", p: 2 }}>
+          <CircularProgress size={24} />
+        </Box>
+      )}
+      {draftError && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          Failed to load draft. Please try again.
         </Alert>
       )}
 
