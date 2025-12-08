@@ -23,11 +23,11 @@ import { EmailRecord } from './database/entities/email-record.entity';
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
         type: 'postgres',
-        host: process.env.DB_HOST,
-        port: parseInt(process.env.DB_PORT || ''),
-        username: process.env.DB_USERNAME,
-        password: process.env.DB_PASSWORD,
-        database: process.env.DB_NAME || 'rfp_db',
+        host: configService.get<string>('DB_HOST'),
+        port: parseInt(configService.get<string>('DB_PORT') || '5432', 10),
+        username: configService.get<string>('DB_USERNAME'),
+        password: configService.get<string>('DB_PASSWORD'),
+        database: configService.get<string>('DB_NAME', 'rfp_db'),
         entities: [Rfp, Vendor, Proposal, EmailRecord],
         synchronize: true,
         ssl: {
