@@ -32,7 +32,6 @@ import { EmailRecord } from './database/entities/email-record.entity';
         synchronize: true,
         ssl: {
           rejectUnauthorized: false,
-          ca: ``,
         },
       }),
       inject: [ConfigService],

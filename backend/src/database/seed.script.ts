@@ -16,6 +16,9 @@ const data_source = new DataSource({
   database: process.env.DB_NAME || 'rfp_db',
   entities: [Rfp, Vendor, Proposal],
   synchronize: true,
+  ssl: {
+    rejectUnauthorized: false,
+  },
 });
 
 data_source
