@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import {
   Box,
   TextField,
@@ -9,12 +9,19 @@ import {
   Typography,
   CircularProgress,
   Alert,
-  List,
-  ListItemButton,
-  ListItemText,
   Chip,
   Grid,
   Divider,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  OutlinedInput,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  DialogContentText,
 } from "@mui/material";
 import {
   Send as SendIcon,
@@ -26,6 +33,7 @@ import {
 } from "@mui/icons-material";
 import { rfpApi, vendorApi } from "../services/api";
 import type { Rfp, Vendor } from "../types";
+import { useToast } from "../contexts/ToastContext";
 
 type CreateRfpPayload = {
   description: string;
@@ -45,6 +53,8 @@ type EmailPreview = {
 export default function CreateRfpPage() {
   const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { showToast } = useToast();
   const draftId = searchParams.get("draft");
 
   const [description, setDescription] = useState("");
@@ -57,6 +67,7 @@ export default function CreateRfpPage() {
   const [emailSent, setEmailSent] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
 
   const {
     data: vendors = [],
@@ -105,6 +116,13 @@ export default function CreateRfpPage() {
       if (hasStructuredData) {
         setCurrentRfp(draftData);
         setEditDescription(draftData.description_raw);
+
+        if (draftData.structured_data?.metadata?.selected_vendors) {
+          setSelectedVendors(
+            draftData.structured_data.metadata.selected_vendors
+          );
+        }
+
         rfpApi
           .getEmailPreview(draftData.id)
           .then((response) => {
@@ -294,22 +312,38 @@ export default function CreateRfpPage() {
   const { mutate: createDraft, isPending: isSavingDraft } = useMutation<
     Rfp,
     unknown,
-    { description: string }
+    { description: string; selected_vendors?: string[] }
   >({
     mutationFn: async (payload) => {
       if (currentDraft) {
-        const response = await rfpApi.updateDraft(currentDraft.id, payload);
+        const response = await rfpApi.updateDraft(currentDraft.id, {
+          description: payload.description,
+          selected_vendors: payload.selected_vendors,
+        });
         return response.data;
       } else {
-        const response = await rfpApi.createDraft(payload);
-        return response.data;
+        const response = await rfpApi.createDraft({
+          description: payload.description,
+        });
+        const draft = response.data;
+        if (payload.selected_vendors && payload.selected_vendors.length > 0) {
+          const updatedResponse = await rfpApi.updateDraft(draft.id, {
+            description: payload.description,
+            selected_vendors: payload.selected_vendors,
+          });
+          return updatedResponse.data;
+        }
+        return draft;
       }
     },
     onSuccess: (draft) => {
       setCurrentDraft(draft);
       setHasUnsavedChanges(false);
+      if (draft.structured_data?.metadata?.selected_vendors) {
+        setSelectedVendors(draft.structured_data.metadata.selected_vendors);
+      }
       queryClient.invalidateQueries({ queryKey: ["drafts"] });
-      alert("Draft saved successfully!");
+      showToast("Draft saved successfully!", "success");
     },
   });
 
@@ -380,15 +414,22 @@ export default function CreateRfpPage() {
       const failCount = results.length - successCount;
 
       if (failCount === 0) {
-        alert(`RFP sent successfully to ${successCount} vendor(s)!`);
+        showToast(
+          `RFP sent successfully to ${successCount} vendor(s)!`,
+          "success"
+        );
         setEmailSent(true);
         if (currentDraft) {
           setCurrentDraft(null);
         }
         queryClient.invalidateQueries({ queryKey: ["drafts"] });
+        setTimeout(() => {
+          navigate("/home");
+        }, 1500);
       } else {
-        alert(
-          `RFP sent to ${successCount} vendor(s), ${failCount} failed. Check details in console.`
+        showToast(
+          `RFP sent to ${successCount} vendor(s), ${failCount} failed.`,
+          "warning"
         );
         console.log("Send results:", results);
         if (successCount > 0) {
@@ -397,6 +438,9 @@ export default function CreateRfpPage() {
             setCurrentDraft(null);
           }
           queryClient.invalidateQueries({ queryKey: ["drafts"] });
+          setTimeout(() => {
+            navigate("/home");
+          }, 1500);
         }
       }
     },
@@ -427,7 +471,10 @@ export default function CreateRfpPage() {
     }
 
     setValidationError(null);
-    createDraft({ description: trimmed });
+    createDraft({
+      description: trimmed,
+      selected_vendors: selectedVendors,
+    });
   };
 
   const handleRegenerate = () => {
@@ -460,23 +507,40 @@ export default function CreateRfpPage() {
     updateRfp({ id: currentRfp.id, description: trimmed });
   };
 
-  const toggleVendorSelection = (vendor_id: string) => {
-    setSelectedVendors((prevSelected) =>
-      prevSelected.includes(vendor_id)
-        ? prevSelected.filter((id) => id !== vendor_id)
-        : [...prevSelected, vendor_id]
-    );
+  const handleVendorChange = (event: any) => {
+    const value = event.target.value;
+    setSelectedVendors(typeof value === "string" ? value.split(",") : value);
   };
 
   const handleSendRfp = () => {
     if (!currentRfp) return;
 
     if (selectedVendors.length === 0) {
-      alert("Please select at least one vendor");
+      showToast("Please select at least one vendor", "warning");
       return;
     }
 
+    setConfirmDialogOpen(true);
+  };
+
+  const handleConfirmSend = () => {
+    if (!currentRfp) return;
+    setConfirmDialogOpen(false);
     sendRfp({ rfp_id: currentRfp.id, vendor_ids: selectedVendors });
+  };
+
+  const handleCancelSend = () => {
+    setConfirmDialogOpen(false);
+  };
+
+  const handleConfirmDialogClose = () => {
+    setConfirmDialogOpen(false);
+  };
+
+  const getSelectedVendorEmails = (): string[] => {
+    return vendors
+      .filter((vendor) => selectedVendors.includes(vendor.id))
+      .map((vendor) => vendor.email);
   };
 
   const isDescriptionEmpty = !description.trim();
@@ -552,7 +616,7 @@ export default function CreateRfpPage() {
             }
           }}
           sx={{ mb: 2 }}
-          disabled={!!currentRfp && !isEditing && !isDraftMode}
+          disabled={!!currentRfp && !isEditing}
           helperText="Describe your requirements in detail. Include items, quantities, budget, delivery timeline, payment terms, or warranty requirements"
         />
 
@@ -637,9 +701,17 @@ export default function CreateRfpPage() {
 
       {currentRfp && !validationError && (
         <>
-          <Grid container spacing={3} sx={{ mb: 3 }}>
-            <Grid item xs={12} md={6}>
-              <Paper sx={{ p: 3 }}>
+          <Grid container spacing={3} sx={{ mb: 3, alignItems: "stretch" }}>
+            <Grid item xs={12} md={6} sx={{ display: "flex" }}>
+              <Paper
+                sx={{
+                  p: 3,
+                  display: "flex",
+                  flexDirection: "column",
+                  width: "100%",
+                  height: "100%",
+                }}
+              >
                 <Box
                   sx={{
                     display: "flex",
@@ -674,46 +746,85 @@ export default function CreateRfpPage() {
                       display: "flex",
                       justifyContent: "center",
                       alignItems: "center",
-                      minHeight: "200px",
+                      flex: 1,
+                      minHeight: "500px",
                     }}
                   >
                     <CircularProgress />
                   </Box>
                 ) : (
-                  <pre
-                    style={{
-                      background: "#f5f5f5",
-                      padding: "15px",
-                      borderRadius: "4px",
-                      overflow: "auto",
-                      maxHeight: "500px",
-                      fontSize: "12px",
+                  <Box
+                    sx={{
+                      flex: 1,
+                      display: "flex",
+                      flexDirection: "column",
+                      minHeight: 0,
+                      maxHeight: "600px",
+                      overflow: "hidden",
                     }}
                   >
-                    {JSON.stringify(currentRfp.structured_data, null, 2)}
-                  </pre>
+                    <pre
+                      style={{
+                        background: "#f5f5f5",
+                        padding: "15px",
+                        borderRadius: "4px",
+                        overflow: "auto",
+                        flex: 1,
+                        margin: 0,
+                        fontSize: "12px",
+                        maxHeight: "100%",
+                      }}
+                    >
+                      {JSON.stringify(currentRfp.structured_data, null, 2)}
+                    </pre>
+                  </Box>
                 )}
               </Paper>
             </Grid>
 
-            <Grid item xs={12} md={6}>
-              <Paper sx={{ p: 3 }}>
-                <Typography variant="h6" gutterBottom>
-                  Email Preview
-                </Typography>
+            <Grid item xs={12} md={6} sx={{ display: "flex" }}>
+              <Paper
+                sx={{
+                  p: 3,
+                  display: "flex",
+                  flexDirection: "column",
+                  width: "100%",
+                  height: "100%",
+                }}
+              >
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    mb: 2,
+                  }}
+                >
+                  <Typography variant="h6">Email Preview</Typography>
+                </Box>
                 {isUpdatingRfp ? (
                   <Box
                     sx={{
                       display: "flex",
                       justifyContent: "center",
                       alignItems: "center",
-                      minHeight: "200px",
+                      flex: 1,
+                      minHeight: "500px",
                     }}
                   >
                     <CircularProgress />
                   </Box>
                 ) : emailPreview ? (
-                  <Box>
+                  <Box
+                    sx={{
+                      flex: 1,
+                      display: "flex",
+                      flexDirection: "column",
+                      minHeight: 0,
+                      maxHeight: "600px",
+                      overflow: "hidden",
+                    }}
+                  >
                     <Typography
                       variant="subtitle2"
                       color="text.secondary"
@@ -726,9 +837,10 @@ export default function CreateRfpPage() {
                         border: "1px solid #ddd",
                         borderRadius: "4px",
                         p: 2,
-                        maxHeight: "500px",
                         overflow: "auto",
                         bgcolor: "#fff",
+                        flex: 1,
+                        maxHeight: "100%",
                       }}
                       dangerouslySetInnerHTML={{ __html: emailPreview.html }}
                     />
@@ -739,7 +851,8 @@ export default function CreateRfpPage() {
                       display: "flex",
                       justifyContent: "center",
                       alignItems: "center",
-                      minHeight: "200px",
+                      flex: 1,
+                      minHeight: "500px",
                     }}
                   >
                     <CircularProgress />
@@ -762,49 +875,100 @@ export default function CreateRfpPage() {
               </Alert>
             ) : (
               <>
-                <List>
-                  {vendors.map((vendor) => {
-                    const isSelected = selectedVendors.includes(vendor.id);
-
-                    return (
-                      <ListItemButton
-                        key={vendor.id}
-                        onClick={() => toggleVendorSelection(vendor.id)}
-                        selected={isSelected}
-                      >
-                        <ListItemText
-                          primary={vendor.name}
-                          secondary={vendor.email}
-                        />
-                        {isSelected && (
-                          <Chip label="Selected" color="primary" size="small" />
-                        )}
-                      </ListItemButton>
-                    );
-                  })}
-                </List>
+                <FormControl fullWidth sx={{ mb: 2 }}>
+                  <InputLabel id="vendor-select-label">
+                    Select Vendors
+                  </InputLabel>
+                  <Select
+                    labelId="vendor-select-label"
+                    id="vendor-select"
+                    multiple
+                    value={selectedVendors}
+                    onChange={handleVendorChange}
+                    input={<OutlinedInput label="Select Vendors" />}
+                    renderValue={(selected) => (
+                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+                        {selected.map((value) => {
+                          const vendor = vendors.find((v) => v.id === value);
+                          return vendor ? (
+                            <Chip
+                              key={value}
+                              label={vendor.name}
+                              onDelete={() => {
+                                setSelectedVendors(
+                                  selectedVendors.filter((id) => id !== value)
+                                );
+                              }}
+                              onMouseDown={(event) => {
+                                event.stopPropagation();
+                              }}
+                            />
+                          ) : null;
+                        })}
+                      </Box>
+                    )}
+                    disabled={emailSent}
+                  >
+                    {vendors.map((vendor) => (
+                      <MenuItem key={vendor.id} value={vendor.id}>
+                        <Box>
+                          <Typography variant="body1">{vendor.name}</Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {vendor.email}
+                          </Typography>
+                        </Box>
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
 
                 <Divider sx={{ my: 2 }} />
 
-                <Button
-                  variant="contained"
-                  onClick={handleSendRfp}
-                  disabled={
-                    isSendingRfp ||
-                    selectedVendors.length === 0 ||
-                    emailSent ||
-                    isEditing
-                  }
-                  startIcon={
-                    isSendingRfp ? <CircularProgress size={20} /> : <SendIcon />
-                  }
-                >
-                  {isSendingRfp
-                    ? "Sending..."
-                    : emailSent
-                      ? "Email Already Sent"
-                      : "Send Email to Selected Vendors"}
-                </Button>
+                <Box sx={{ display: "flex", gap: 2 }}>
+                  <Button
+                    variant="contained"
+                    onClick={handleSendRfp}
+                    disabled={
+                      isSendingRfp ||
+                      selectedVendors.length === 0 ||
+                      emailSent ||
+                      isEditing
+                    }
+                    startIcon={
+                      isSendingRfp ? (
+                        <CircularProgress size={20} />
+                      ) : (
+                        <SendIcon />
+                      )
+                    }
+                    fullWidth
+                    size="large"
+                  >
+                    {isSendingRfp
+                      ? "Sending..."
+                      : emailSent
+                        ? "Email Already Sent"
+                        : "Send Email to Selected Vendors"}
+                  </Button>
+
+                  {currentDraft && currentRfp && !isEditing && (
+                    <Button
+                      variant="outlined"
+                      onClick={handleSaveDraft}
+                      disabled={isSavingDraft || isDescriptionEmpty}
+                      startIcon={
+                        isSavingDraft ? (
+                          <CircularProgress size={20} />
+                        ) : (
+                          <SaveOutlinedIcon />
+                        )
+                      }
+                      size="large"
+                    >
+                      {isSavingDraft ? "Updating..." : "Update Draft"}
+                    </Button>
+                  )}
+                </Box>
 
                 {emailSent && (
                   <Alert severity="success" sx={{ mt: 2 }}>
@@ -821,6 +985,69 @@ export default function CreateRfpPage() {
               </>
             )}
           </Paper>
+
+          <Dialog
+            open={confirmDialogOpen}
+            onClose={handleConfirmDialogClose}
+            maxWidth="md"
+            fullWidth
+          >
+            <DialogTitle>Confirm Sending RFP Email</DialogTitle>
+            <DialogContent>
+              <DialogContentText gutterBottom>
+                You are about to send this RFP email to the following vendors:
+              </DialogContentText>
+              <Box sx={{ mb: 2 }}>
+                {getSelectedVendorEmails().map((email, index) => (
+                  <Chip
+                    key={index}
+                    label={email}
+                    color="primary"
+                    sx={{ mr: 1, mb: 1 }}
+                  />
+                ))}
+              </Box>
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="subtitle2" gutterBottom>
+                Email Subject:
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                {emailPreview?.subject || "N/A"}
+              </Typography>
+              <Typography variant="subtitle2" gutterBottom>
+                Email Content Preview:
+              </Typography>
+              {emailPreview && (
+                <Box
+                  sx={{
+                    border: "1px solid #ddd",
+                    borderRadius: "4px",
+                    p: 2,
+                    maxHeight: "400px",
+                    overflow: "auto",
+                    bgcolor: "#fff",
+                    mt: 1,
+                  }}
+                  dangerouslySetInnerHTML={{ __html: emailPreview.html }}
+                />
+              )}
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={handleCancelSend} disabled={isSendingRfp}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleConfirmSend}
+                variant="contained"
+                disabled={isSendingRfp}
+                startIcon={
+                  isSendingRfp ? <CircularProgress size={20} /> : <SendIcon />
+                }
+              >
+                {isSendingRfp ? "Sending..." : "Confirm & Send"}
+              </Button>
+            </DialogActions>
+          </Dialog>
         </>
       )}
     </Box>

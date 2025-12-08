@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Vendor } from '../database/entities/vendor.entity';
@@ -13,7 +13,18 @@ export class VendorService {
   ) {}
 
   async create(createVendorDto: CreateVendorDto): Promise<Vendor> {
-    const vendor = this.vendorRepository.create(createVendorDto);
+    const existing_vendor = await this.vendorRepository.findOne({
+      where: { email: createVendorDto.email.toLowerCase().trim() },
+    });
+
+    if (existing_vendor) {
+      throw new ConflictException('A vendor with this email already exists');
+    }
+
+    const vendor = this.vendorRepository.create({
+      ...createVendorDto,
+      email: createVendorDto.email.toLowerCase().trim(),
+    });
     return this.vendorRepository.save(vendor);
   }
 
@@ -43,6 +54,20 @@ export class VendorService {
 
   async update(id: string, updateVendorDto: UpdateVendorDto): Promise<Vendor> {
     const vendor = await this.findOne(id);
+
+    if (updateVendorDto.email) {
+      const normalized_email = updateVendorDto.email.toLowerCase().trim();
+      const existing_vendor = await this.vendorRepository.findOne({
+        where: { email: normalized_email },
+      });
+
+      if (existing_vendor && existing_vendor.id !== id) {
+        throw new ConflictException('A vendor with this email already exists');
+      }
+
+      updateVendorDto.email = normalized_email;
+    }
+
     Object.assign(vendor, updateVendorDto);
     return this.vendorRepository.save(vendor);
   }

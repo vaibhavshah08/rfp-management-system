@@ -23,8 +23,10 @@ export const rfpApi = {
   getAllDrafts: () => api.get("/rfps/drafts"),
   createDraft: (data: { description: string }) =>
     api.post("/rfps/drafts", data),
-  updateDraft: (id: string, data: { description?: string }) =>
-    api.patch(`/rfps/${id}`, data),
+  updateDraft: (
+    id: string,
+    data: { description?: string; selected_vendors?: string[] }
+  ) => api.patch(`/rfps/drafts/${id}`, data),
   convertDraftToRfp: (id: string, description?: string) =>
     api.post(`/rfps/${id}/convert-to-rfp`, description ? { description } : {}),
 };

@@ -23,6 +23,7 @@ import LandingPage from './pages/LandingPage';
 import SentProposalsPage from './pages/SentProposalsPage';
 import ReceivedProposalsPage from './pages/ReceivedProposalsPage';
 import DraftsPage from './pages/DraftsPage';
+import { ToastProvider } from './contexts/ToastContext';
 
 const queryClient = new QueryClient();
 
@@ -166,9 +167,11 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <Router>
-          <AppContent />
-        </Router>
+        <ToastProvider>
+          <Router>
+            <AppContent />
+          </Router>
+        </ToastProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

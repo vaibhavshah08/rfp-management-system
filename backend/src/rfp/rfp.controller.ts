@@ -64,6 +64,12 @@ export class RfpController {
     return this.rfpService.convertDraftToRfp(id, body?.description);
   }
 
+  @Patch('drafts/:id')
+  @ApiOperation({ summary: 'Update an RFP draft' })
+  updateDraft(@Param('id') id: string, @Body() updateRfpDto: UpdateRfpDto) {
+    return this.rfpService.update(id, updateRfpDto, true);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get RFP by ID' })
   findOne(@Param('id') id: string) {

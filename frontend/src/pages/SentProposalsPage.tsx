@@ -80,7 +80,6 @@ export default function SentProposalsPage() {
       });
     } catch (error) {
       console.error("Failed to load preview", error);
-      alert("Failed to load preview");
     } finally {
       setLoadingPreview(false);
     }
@@ -168,7 +167,7 @@ export default function SentProposalsPage() {
                     </Box>
                   </Box>
 
-                  <TableContainer>
+                  <TableContainer sx={{ maxHeight: "300px", overflow: "auto" }}>
                     <Table size="small">
                       <TableHead>
                         <TableRow>

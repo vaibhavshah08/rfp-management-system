@@ -22,9 +22,11 @@ import {
 import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { vendorApi } from '../services/api';
 import type { Vendor, CreateVendorDto } from '../types';
+import { useToast } from '../contexts/ToastContext';
 
 export default function VendorListPage() {
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const [open, setOpen] = useState(false);
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
   const [formData, setFormData] = useState<CreateVendorDto>({
@@ -32,6 +34,7 @@ export default function VendorListPage() {
     email: '',
     metadata: {},
   });
+  const [formError, setFormError] = useState<string | null>(null);
 
   const { data: vendorsData, isLoading, isError } = useQuery<Vendor[]>({
     queryKey: ['vendors'],
@@ -55,7 +58,15 @@ export default function VendorListPage() {
       queryClient.invalidateQueries({ queryKey: ['vendors'] });
       setOpen(false);
       resetForm();
-      alert('Vendor created successfully!');
+      showToast('Vendor created successfully!', 'success');
+    },
+    onError: (error: any) => {
+      const error_message = error?.response?.data?.message || 'Failed to create vendor';
+      if (error_message.includes('email already exists')) {
+        setFormError('A vendor with this email already exists');
+      } else {
+        showToast(error_message, 'error');
+      }
     },
   });
 
@@ -66,7 +77,15 @@ export default function VendorListPage() {
       queryClient.invalidateQueries({ queryKey: ['vendors'] });
       setOpen(false);
       resetForm();
-      alert('Vendor updated successfully!');
+      showToast('Vendor updated successfully!', 'success');
+    },
+    onError: (error: any) => {
+      const error_message = error?.response?.data?.message || 'Failed to update vendor';
+      if (error_message.includes('email already exists')) {
+        setFormError('A vendor with this email already exists');
+      } else {
+        showToast(error_message, 'error');
+      }
     },
   });
 
@@ -74,16 +93,21 @@ export default function VendorListPage() {
     mutationFn: (id: string) => vendorApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vendors'] });
-      alert('Vendor deleted successfully!');
+      showToast('Vendor deleted successfully!', 'success');
+    },
+    onError: () => {
+      showToast('Failed to delete vendor', 'error');
     },
   });
 
   const resetForm = () => {
     setFormData({ name: '', email: '', metadata: {} });
     setEditingVendor(null);
+    setFormError(null);
   };
 
   const handleOpen = (vendor?: Vendor) => {
+    setFormError(null);
     if (vendor) {
       setEditingVendor(vendor);
       setFormData({
@@ -100,17 +124,22 @@ export default function VendorListPage() {
   const handleClose = () => {
     setOpen(false);
     resetForm();
+    setFormError(null);
   };
 
   const handleSubmit = () => {
+    setFormError(null);
+
     if (!formData.name.trim()) {
-      alert('Please enter a vendor name');
+      setFormError('Please enter a vendor name');
       return;
     }
+
     if (!formData.email.trim() || !formData.email.includes('@')) {
-      alert('Please enter a valid email address');
+      setFormError('Please enter a valid email address');
       return;
     }
+
     if (editingVendor) {
       updateMutation.mutate({ id: editingVendor.id, data: formData });
     } else {
@@ -214,9 +243,14 @@ export default function VendorListPage() {
               type="email"
               placeholder="vendor@example.com"
               value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              onChange={(e) => {
+                setFormData({ ...formData, email: e.target.value });
+                setFormError(null);
+              }}
               margin="normal"
               required
+              error={!!formError}
+              helperText={formError}
             />
             <TextField
               fullWidth
@@ -244,11 +278,6 @@ export default function VendorListPage() {
               })()}
             />
           </Box>
-          {(createMutation.isError || updateMutation.isError) && (
-            <Alert severity="error" sx={{ mt: 2 }}>
-              {editingVendor ? 'Failed to update vendor' : 'Failed to create vendor'}
-            </Alert>
-          )}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={handleClose} variant="outlined">

@@ -115,7 +115,7 @@ export default function ReceivedProposalsPage() {
                     </Box>
                   </Box>
 
-                  <TableContainer>
+                  <TableContainer sx={{ maxHeight: "300px", overflow: "auto" }}>
                     <Table size="small">
                       <TableHead>
                         <TableRow>

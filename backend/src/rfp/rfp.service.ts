@@ -34,7 +34,7 @@ export class RfpService {
         warranty: null,
         special_requests: null,
         category: null,
-        metadata: null,
+        metadata: {},
       };
     } else {
       structured_data = await this.aiService.generateStructuredRfp(description);
@@ -153,10 +153,29 @@ export class RfpService {
           );
         }
 
+        const existing_metadata = rfp.structured_data?.metadata || {};
+        
         rfp.description_raw = description;
-        rfp.structured_data = structured_data as typeof rfp.structured_data;
+        rfp.structured_data = {
+          ...structured_data,
+          metadata: existing_metadata,
+        } as typeof rfp.structured_data;
+        
+        if (updateRfpDto.selected_vendors !== undefined) {
+          if (!rfp.structured_data.metadata) {
+            rfp.structured_data.metadata = {};
+          }
+          rfp.structured_data.metadata.selected_vendors = updateRfpDto.selected_vendors;
+        }
       } else if (rfp.is_draft || is_draft === true) {
         rfp.description_raw = description;
+        
+        if (updateRfpDto.selected_vendors !== undefined) {
+          if (!rfp.structured_data.metadata) {
+            rfp.structured_data.metadata = {};
+          }
+          rfp.structured_data.metadata.selected_vendors = updateRfpDto.selected_vendors;
+        }
       } else {
         const structured_data = await this.aiService.generateStructuredRfp(description);
         
@@ -168,9 +187,43 @@ export class RfpService {
           );
         }
 
+        const existing_metadata = rfp.structured_data?.metadata || {};
+        
         rfp.description_raw = description;
-        rfp.structured_data = structured_data as typeof rfp.structured_data;
+        rfp.structured_data = {
+          ...structured_data,
+          metadata: existing_metadata,
+        } as typeof rfp.structured_data;
+        
+        if (updateRfpDto.selected_vendors !== undefined) {
+          if (!rfp.structured_data.metadata) {
+            rfp.structured_data.metadata = {};
+          }
+          rfp.structured_data.metadata.selected_vendors = updateRfpDto.selected_vendors;
+        }
       }
+    }
+
+    if (updateRfpDto.selected_vendors !== undefined && !updateRfpDto.description) {
+      if (!rfp.structured_data) {
+        rfp.structured_data = {
+          budget: null,
+          budget_currency: null,
+          budget_per_unit: null,
+          items: [],
+          quantities: {},
+          delivery_timeline: null,
+          payment_terms: null,
+          warranty: null,
+          special_requests: null,
+          category: null,
+          metadata: {},
+        };
+      }
+      if (!rfp.structured_data.metadata) {
+        rfp.structured_data.metadata = {};
+      }
+      rfp.structured_data.metadata.selected_vendors = updateRfpDto.selected_vendors;
     }
 
     if (is_draft !== null) {
