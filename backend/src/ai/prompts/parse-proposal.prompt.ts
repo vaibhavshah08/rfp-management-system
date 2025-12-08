@@ -81,6 +81,7 @@ ITEM EXTRACTION RULES:
   - Fix casing, trim spaces, remove obvious noise like random emojis.
 - Include key specs in a compact way when they clearly belong to that item (e.g., storage, RAM, color, screen size).
 - If quantity is mentioned in text (QTY, Qty, quantity, etc.), extract the numeric value.
+- CRITICAL: quantity MUST be a valid number (not null, not undefined). If you cannot determine the quantity for an item, DO NOT include that item in the items array. Only include items where you can extract both a valid name AND a valid numeric quantity.
 
 PAYMENT METHODS:
 - Extract payment methods mentioned (UPI, Card, Net Banking, NEFT/RTGS, Cash, etc.) and include them in notes.
@@ -122,5 +123,7 @@ For any field where the value is not available or cannot be determined, use null
 - "notes": null
 - "unit_price": null
 - "total_price": null
+
+IMPORTANT: The "quantity" field in items array MUST always be a valid number (never null). If you cannot determine the quantity for an item, exclude that item from the items array entirely. Only include items where both name and quantity can be determined.
 
 Make sure the final output is syntactically valid JSON and can be parsed by a standard JSON parser. Do not include any explanation, comments, or additional keys beyond what is specified.`;

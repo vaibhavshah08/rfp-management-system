@@ -105,6 +105,18 @@ export class AiService {
       const json_match = content.match(/\{[\s\S]*\}/);
       const json_content = json_match ? json_match[0] : content;
       const parsed = JSON.parse(json_content);
+
+      // Filter out items with null or missing quantities before validation
+      if (parsed.items && Array.isArray(parsed.items)) {
+        parsed.items = parsed.items.filter(
+          (item: any) =>
+            item &&
+            item.quantity !== null &&
+            item.quantity !== undefined &&
+            typeof item.quantity === 'number',
+        );
+      }
+
       return ProposalStructureSchema.parse(parsed);
     } catch (error) {
       this.logger.error('Error parsing vendor email', error);
