@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { RfpService } from './rfp.service';
 import { RfpController } from './rfp.controller';
@@ -7,7 +7,11 @@ import { AiModule } from '../ai/ai.module';
 import { EmailModule } from '../email/email.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Rfp]), AiModule, EmailModule],
+  imports: [
+    TypeOrmModule.forFeature([Rfp]),
+    AiModule,
+    forwardRef(() => EmailModule),
+  ],
   controllers: [RfpController],
   providers: [RfpService],
   exports: [RfpService],

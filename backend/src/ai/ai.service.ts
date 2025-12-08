@@ -13,6 +13,7 @@ import { GENERATE_RFP_PROMPT } from './prompts/generate-rfp.prompt';
 import { PARSE_PROPOSAL_PROMPT } from './prompts/parse-proposal.prompt';
 import { COMPARE_PROPOSALS_PROMPT } from './prompts/compare-proposals.prompt';
 import { GENERATE_EMAIL_SUBJECT_PROMPT } from './prompts/generate-email-subject.prompt';
+import { REPHRASE_SPECIAL_REQUESTS_PROMPT } from './prompts/rephrase-special-requests.prompt';
 
 @Injectable()
 export class AiService {
@@ -141,6 +142,28 @@ export class AiService {
     } catch (error) {
       this.logger.error('Error generating email subject', error);
       return 'RFP Request';
+    }
+  }
+
+  async rephraseSpecialRequests(specialRequests: string): Promise<string> {
+    try {
+      const prompt = `${REPHRASE_SPECIAL_REQUESTS_PROMPT}\n\nSpecial Request: ${specialRequests}\n\nReturn ONLY the rephrased text, no other text.`;
+
+      const response = await this.ai.models.generateContent({
+        model: this.modelName,
+        contents: prompt,
+      });
+
+      const content = response.text;
+      if (!content) {
+        return specialRequests;
+      }
+
+      const rephrased = content.trim().replace(/^["']|["']$/g, '');
+      return rephrased || specialRequests;
+    } catch (error) {
+      this.logger.error('Error rephrasing special requests', error);
+      return specialRequests;
     }
   }
 }

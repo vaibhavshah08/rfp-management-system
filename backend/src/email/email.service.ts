@@ -18,6 +18,7 @@ import { Proposal } from '../database/entities/proposal.entity';
 import { EmailRecord } from '../database/entities/email-record.entity';
 import { VendorService } from '../vendor/vendor.service';
 import { AiService } from '../ai/ai.service';
+import { RfpService } from '../rfp/rfp.service';
 
 @Injectable()
 export class EmailService implements OnModuleInit {
@@ -30,6 +31,8 @@ export class EmailService implements OnModuleInit {
     private vendorService: VendorService,
     @Inject(forwardRef(() => AiService))
     private aiService: AiService,
+    @Inject(forwardRef(() => RfpService))
+    private rfpService: RfpService,
     @InjectRepository(Proposal)
     private proposalRepository: Repository<Proposal>,
     @InjectRepository(Rfp)
@@ -68,6 +71,14 @@ export class EmailService implements OnModuleInit {
       ),
     );
 
+    const success_count = results.filter(
+      (r) => r.status === 'fulfilled',
+    ).length;
+
+    if (success_count > 0 && rfp.is_draft) {
+      await this.rfpService.markDraftAsSent(rfp.id);
+    }
+
     return results.map((result, index) => {
       const vendor = vendors[index];
       if (result.status === 'fulfilled') {
@@ -92,7 +103,7 @@ export class EmailService implements OnModuleInit {
     vendorName: string,
     vendor_id: string,
   ): Promise<void> {
-    const email_html = this.generateRfpEmailTemplate(rfp, vendorName);
+    const email_html = await this.generateRfpEmailTemplate(rfp, vendorName);
     const email_text = this.generateRfpEmailText(rfp);
     const subject = await this.aiService.generateEmailSubject(
       rfp.description_raw,
@@ -132,27 +143,49 @@ export class EmailService implements OnModuleInit {
     }
   }
 
-  private generateRfpEmailTemplate(rfp: Rfp, vendorName: string): string {
+  private formatMoney(amount: number, currency?: string | null): string {
+    if (amount === null || amount === undefined) return 'N/A';
+    const safe_currency = currency || 'USD';
+    try {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: safe_currency,
+        maximumFractionDigits: 2,
+      }).format(amount);
+    } catch {
+      return `${currency ? currency + ' ' : ''}${amount.toLocaleString()}`;
+    }
+  }
+
+  private async generateRfpEmailTemplate(
+    rfp: Rfp,
+    vendorName: string,
+  ): Promise<string> {
     const { structured_data } = rfp;
-    const template_path = join(
-      process.cwd(),
-      'backend',
-      'src',
-      'email',
-      'templates',
-      'rfp-email.template.html',
-    );
-    let template = readFileSync(template_path, 'utf-8');
+    const template_path = 'src/email/templates/rfp-email.template.html';
+    let template = readFileSync(join(process.cwd(), template_path), 'utf-8');
 
     template = template.replace('{{VENDOR_NAME}}', vendorName);
     template = template.replace('{{RFP_ID}}', rfp.id);
 
-    const budget_section = structured_data.budget
-      ? `<div class="section">
+    const budget_section =
+      structured_data.budget !== null && structured_data.budget !== undefined
+        ? `<div class="section">
           <h3>Budget</h3>
-          <p>$${structured_data.budget.toLocaleString()}</p>
+          <p>${this.formatMoney(
+            structured_data.budget,
+            structured_data.budget_currency,
+          )}</p>
+          ${
+            structured_data.budget_per_unit
+              ? `<p><strong>Budget per unit:</strong> ${this.formatMoney(
+                  structured_data.budget_per_unit,
+                  structured_data.budget_currency,
+                )}</p>`
+              : ''
+          }
         </div>`
-      : '';
+        : '';
 
     const items_section =
       structured_data.items && structured_data.items.length > 0
@@ -162,8 +195,9 @@ export class EmailService implements OnModuleInit {
               .map(
                 (item) => `
               <div class="item">
-                <strong>${item.name}</strong> - Quantity: ${item.quantity}
-                ${item.specifications ? `<br><em>${item.specifications}</em>` : ''}
+                <strong>Item:</strong> ${item.name}<br>
+                <strong>Requirement:</strong> ${item.specifications || 'N/A'}<br>
+                <strong>Quantity:</strong> ${item.quantity}
               </div>
             `,
               )
@@ -180,7 +214,7 @@ export class EmailService implements OnModuleInit {
 
     const payment_terms_section = structured_data.payment_terms
       ? `<div class="section">
-          <h3>Payment Terms</h3>
+          <h3>Payment Expectations</h3>
           <p>${structured_data.payment_terms}</p>
         </div>`
       : '';
@@ -191,6 +225,17 @@ export class EmailService implements OnModuleInit {
           <p>${structured_data.warranty}</p>
         </div>`
       : '';
+
+    let special_requests_section = '';
+    if (structured_data.special_requests) {
+      const rephrased_requests = await this.aiService.rephraseSpecialRequests(
+        structured_data.special_requests,
+      );
+      special_requests_section = `<div class="section">
+          <h3>Special Requests</h3>
+          <p>${rephrased_requests}</p>
+        </div>`;
+    }
 
     template = template.replace('{{BUDGET_SECTION}}', budget_section);
     template = template.replace('{{ITEMS_SECTION}}', items_section);
@@ -203,6 +248,10 @@ export class EmailService implements OnModuleInit {
       payment_terms_section,
     );
     template = template.replace('{{WARRANTY_SECTION}}', warranty_section);
+    template = template.replace(
+      '{{SPECIAL_REQUESTS_SECTION}}',
+      special_requests_section,
+    );
 
     return template;
   }
@@ -212,7 +261,7 @@ export class EmailService implements OnModuleInit {
     text: string;
     subject: string;
   }> {
-    const html = this.generateRfpEmailTemplate(rfp, 'Vendor Name');
+    const html = await this.generateRfpEmailTemplate(rfp, 'Vendor Name');
     const text = this.generateRfpEmailText(rfp);
     const subject = await this.aiService.generateEmailSubject(
       rfp.description_raw,
@@ -225,7 +274,17 @@ export class EmailService implements OnModuleInit {
     let text = `Request for Proposal (RFP)\n\n`;
 
     if (structured_data.budget) {
-      text += `Budget: $${structured_data.budget.toLocaleString()}\n\n`;
+      text += `Budget: ${this.formatMoney(
+        structured_data.budget,
+        structured_data.budget_currency,
+      )}\n`;
+      if (structured_data.budget_per_unit) {
+        text += `Budget per unit: ${this.formatMoney(
+          structured_data.budget_per_unit,
+          structured_data.budget_currency,
+        )}\n`;
+      }
+      text += `\n`;
     }
 
     if (structured_data.items && structured_data.items.length > 0) {

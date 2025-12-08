@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import {
   Box,
   TextField,
@@ -21,6 +22,7 @@ import {
   Edit as EditIcon,
   Save as SaveIcon,
   Cancel as CancelIcon,
+  SaveOutlined as SaveOutlinedIcon,
 } from "@mui/icons-material";
 import { rfpApi, vendorApi } from "../services/api";
 import type { Rfp, Vendor } from "../types";
@@ -41,14 +43,20 @@ type EmailPreview = {
 };
 
 export default function CreateRfpPage() {
+  const [searchParams] = useSearchParams();
+  const queryClient = useQueryClient();
+  const draftId = searchParams.get("draft");
+
   const [description, setDescription] = useState("");
   const [selectedVendors, setSelectedVendors] = useState<string[]>([]);
   const [currentRfp, setCurrentRfp] = useState<Rfp | null>(null);
+  const [currentDraft, setCurrentDraft] = useState<Rfp | null>(null);
   const [emailPreview, setEmailPreview] = useState<EmailPreview | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editDescription, setEditDescription] = useState("");
   const [emailSent, setEmailSent] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   const {
     data: vendors = [],
@@ -61,6 +69,73 @@ export default function CreateRfpPage() {
       return response.data;
     },
   });
+
+  const { data: draftData } = useQuery<Rfp>({
+    queryKey: ["draft", draftId],
+    queryFn: async () => {
+      if (!draftId) return null;
+      const response = await rfpApi.getById(draftId);
+      return response.data;
+    },
+    enabled: !!draftId,
+  });
+
+  useEffect(() => {
+    if (draftData && draftData.is_draft) {
+      setCurrentDraft(draftData);
+      setDescription(draftData.description_raw);
+      setHasUnsavedChanges(false);
+
+      const hasStructuredData =
+        draftData.structured_data &&
+        ((draftData.structured_data.budget !== null &&
+          draftData.structured_data.budget !== undefined) ||
+          (draftData.structured_data.items &&
+            draftData.structured_data.items.length > 0 &&
+            draftData.structured_data.items.some((item: any) =>
+              item?.name?.trim()
+            )) ||
+          (draftData.structured_data.delivery_timeline &&
+            draftData.structured_data.delivery_timeline.trim()) ||
+          (draftData.structured_data.payment_terms &&
+            draftData.structured_data.payment_terms.trim()) ||
+          (draftData.structured_data.warranty &&
+            draftData.structured_data.warranty.trim()));
+
+      if (hasStructuredData) {
+        setCurrentRfp(draftData);
+        setEditDescription(draftData.description_raw);
+        rfpApi
+          .getEmailPreview(draftData.id)
+          .then((response) => {
+            setEmailPreview(response.data);
+          })
+          .catch((error) => {
+            console.error("Failed to fetch email preview", error);
+          });
+      }
+    }
+  }, [draftData]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges && !currentRfp && !currentDraft) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [hasUnsavedChanges, currentRfp, currentDraft]);
+
+  useEffect(() => {
+    if (description && !currentRfp && !currentDraft) {
+      setHasUnsavedChanges(true);
+    } else {
+      setHasUnsavedChanges(false);
+    }
+  }, [description, currentRfp, currentDraft]);
 
   const {
     mutate: createRfp,
@@ -93,6 +168,9 @@ export default function CreateRfpPage() {
       }
 
       setCurrentRfp(rfp);
+      if (rfp.is_draft) {
+        setCurrentDraft(rfp);
+      }
       setEditDescription(rfp.description_raw);
       setIsEditing(false);
       setValidationError(null);
@@ -192,6 +270,9 @@ export default function CreateRfpPage() {
       }
 
       setCurrentRfp(rfp);
+      if (rfp.is_draft) {
+        setCurrentDraft(rfp);
+      }
       setIsEditing(false);
       setDescription(rfp.description_raw);
       setValidationError(null);
@@ -206,6 +287,80 @@ export default function CreateRfpPage() {
       const errorMessage =
         error?.response?.data?.message ||
         "The description provided is not detailed enough. Please provide more specific information.";
+      setValidationError(errorMessage);
+    },
+  });
+
+  const { mutate: createDraft, isPending: isSavingDraft } = useMutation<
+    Rfp,
+    unknown,
+    { description: string }
+  >({
+    mutationFn: async (payload) => {
+      if (currentDraft) {
+        const response = await rfpApi.updateDraft(currentDraft.id, payload);
+        return response.data;
+      } else {
+        const response = await rfpApi.createDraft(payload);
+        return response.data;
+      }
+    },
+    onSuccess: (draft) => {
+      setCurrentDraft(draft);
+      setHasUnsavedChanges(false);
+      queryClient.invalidateQueries({ queryKey: ["drafts"] });
+      alert("Draft saved successfully!");
+    },
+  });
+
+  const { mutate: convertDraftToRfp, isPending: isConverting } = useMutation<
+    Rfp,
+    unknown,
+    { draftId: string; description: string }
+  >({
+    mutationFn: async ({ draftId, description }) => {
+      const response = await rfpApi.convertDraftToRfp(draftId, description);
+      return response.data;
+    },
+    onSuccess: async (rfp) => {
+      const hasValidData =
+        (rfp.structured_data.budget !== null &&
+          rfp.structured_data.budget !== undefined) ||
+        (rfp.structured_data.items &&
+          rfp.structured_data.items.length > 0 &&
+          rfp.structured_data.items.some((item: any) => item?.name?.trim())) ||
+        (rfp.structured_data.delivery_timeline &&
+          rfp.structured_data.delivery_timeline.trim()) ||
+        (rfp.structured_data.payment_terms &&
+          rfp.structured_data.payment_terms.trim()) ||
+        (rfp.structured_data.warranty && rfp.structured_data.warranty.trim());
+
+      if (!hasValidData) {
+        setValidationError(
+          "The description provided is not detailed enough. Please provide more specific information including: items/products needed, quantities, budget, delivery timeline, payment terms, or warranty requirements."
+        );
+        setEmailPreview(null);
+        return;
+      }
+
+      setCurrentRfp(rfp);
+      setCurrentDraft(rfp);
+      setEditDescription(rfp.description_raw);
+      setIsEditing(false);
+      setValidationError(null);
+      setHasUnsavedChanges(false);
+      queryClient.invalidateQueries({ queryKey: ["drafts"] });
+      try {
+        const previewResponse = await rfpApi.getEmailPreview(rfp.id);
+        setEmailPreview(previewResponse.data);
+      } catch (error) {
+        console.error("Failed to fetch email preview", error);
+      }
+    },
+    onError: (error: any) => {
+      const errorMessage =
+        error?.response?.data?.message ||
+        "Failed to convert draft to RFP. Please check your description.";
       setValidationError(errorMessage);
     },
   });
@@ -226,14 +381,22 @@ export default function CreateRfpPage() {
 
       if (failCount === 0) {
         alert(`RFP sent successfully to ${successCount} vendor(s)!`);
-        resetForm();
+        setEmailSent(true);
+        if (currentDraft) {
+          setCurrentDraft(null);
+        }
+        queryClient.invalidateQueries({ queryKey: ["drafts"] });
       } else {
         alert(
           `RFP sent to ${successCount} vendor(s), ${failCount} failed. Check details in console.`
         );
         console.log("Send results:", results);
         if (successCount > 0) {
-          resetForm();
+          setEmailSent(true);
+          if (currentDraft) {
+            setCurrentDraft(null);
+          }
+          queryClient.invalidateQueries({ queryKey: ["drafts"] });
         }
       }
     },
@@ -247,8 +410,24 @@ export default function CreateRfpPage() {
       return;
     }
 
+    if (currentDraft) {
+      convertDraftToRfp({ draftId: currentDraft.id, description: trimmed });
+    } else {
+      setValidationError(null);
+      createRfp({ description: trimmed });
+    }
+  };
+
+  const handleSaveDraft = () => {
+    const trimmed = description.trim();
+
+    if (!trimmed) {
+      setValidationError("Please enter a description to save as draft");
+      return;
+    }
+
     setValidationError(null);
-    createRfp({ description: trimmed });
+    createDraft({ description: trimmed });
   };
 
   const handleRegenerate = () => {
@@ -281,17 +460,6 @@ export default function CreateRfpPage() {
     updateRfp({ id: currentRfp.id, description: trimmed });
   };
 
-  const resetForm = () => {
-    setDescription("");
-    setCurrentRfp(null);
-    setEmailPreview(null);
-    setSelectedVendors([]);
-    setIsEditing(false);
-    setEditDescription("");
-    setEmailSent(false);
-    setValidationError(null);
-  };
-
   const toggleVendorSelection = (vendor_id: string) => {
     setSelectedVendors((prevSelected) =>
       prevSelected.includes(vendor_id)
@@ -314,16 +482,35 @@ export default function CreateRfpPage() {
   const isDescriptionEmpty = !description.trim();
   const hasVendors = vendors.length > 0;
 
+  const isDraftMode = !!currentDraft || !!draftId;
+  const showDraftWarning = hasUnsavedChanges && !currentRfp && !currentDraft;
+
   return (
     <Box>
       <Typography variant="h4" gutterBottom>
-        Create New RFP
+        {isDraftMode ? "Edit Draft" : "Create New RFP"}
       </Typography>
 
       <Typography variant="body2" color="text.secondary" paragraph>
-        Describe your requirements in simple language. We&apos;ll convert it
-        into a structured RFP.
+        {isDraftMode
+          ? "Continue editing your draft. When ready, click 'Preview RFP Email' to generate structured data and preview."
+          : "Describe your requirements in simple language. We'll convert it into a structured RFP and show you the email preview."}
       </Typography>
+
+      {showDraftWarning && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          You have unsaved changes. If you leave this page, your changes will be
+          lost. Consider saving as a draft.
+        </Alert>
+      )}
+
+      {currentDraft && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          You are editing a draft. Click "Preview RFP Email" to generate
+          structured data and preview the email, or "Save as Draft" to save your
+          changes.
+        </Alert>
+      )}
 
       <Paper sx={{ p: 3, mb: 3 }}>
         <Box
@@ -354,29 +541,58 @@ export default function CreateRfpPage() {
           placeholder="Example: I need 100 laptops with 16GB RAM, delivery within 30 days, budget $50,000. Payment terms: Net 30. Warranty: 2 years."
           value={isEditing && currentRfp ? editDescription : description}
           onChange={(event) => {
-            setValidationError(null); // Clear validation error when user types
+            setValidationError(null);
             if (isEditing) {
               setEditDescription(event.target.value);
             } else {
               setDescription(event.target.value);
+              if (!currentRfp && !currentDraft) {
+                setHasUnsavedChanges(true);
+              }
             }
           }}
           sx={{ mb: 2 }}
-          disabled={!!currentRfp && !isEditing}
+          disabled={!!currentRfp && !isEditing && !isDraftMode}
           helperText="Describe your requirements in detail. Include items, quantities, budget, delivery timeline, payment terms, or warranty requirements"
         />
 
         {!currentRfp && (
-          <Button
-            variant="contained"
-            onClick={handleCreateRfp}
-            disabled={isCreatingRfp || isDescriptionEmpty}
-            startIcon={
-              isCreatingRfp ? <CircularProgress size={20} /> : <SendIcon />
-            }
-          >
-            {isCreatingRfp ? "Creating..." : "Create RFP"}
-          </Button>
+          <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
+            <Button
+              variant="contained"
+              onClick={handleCreateRfp}
+              disabled={isCreatingRfp || isConverting || isDescriptionEmpty}
+              startIcon={
+                isCreatingRfp || isConverting ? (
+                  <CircularProgress size={20} />
+                ) : (
+                  <SendIcon />
+                )
+              }
+            >
+              {isConverting
+                ? "Generating Preview..."
+                : isCreatingRfp
+                  ? "Generating Preview..."
+                  : isDraftMode
+                    ? "Preview RFP Email from Draft"
+                    : "Preview RFP Email"}
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={handleSaveDraft}
+              disabled={isSavingDraft || isDescriptionEmpty}
+              startIcon={
+                isSavingDraft ? (
+                  <CircularProgress size={20} />
+                ) : (
+                  <SaveOutlinedIcon />
+                )
+              }
+            >
+              {isSavingDraft ? "Saving..." : "Save as Draft"}
+            </Button>
+          </Box>
         )}
 
         {isEditing && currentRfp && (
@@ -437,7 +653,7 @@ export default function CreateRfpPage() {
                     variant="outlined"
                     size="small"
                     onClick={handleRegenerate}
-                    disabled={isRegenerating || emailSent}
+                    disabled={isRegenerating || emailSent || isUpdatingRfp}
                     startIcon={
                       isRegenerating ? (
                         <CircularProgress size={16} />
@@ -452,18 +668,31 @@ export default function CreateRfpPage() {
                     {isRegenerating ? "Regenerating..." : "Regenerate"}
                   </Button>
                 </Box>
-                <pre
-                  style={{
-                    background: "#f5f5f5",
-                    padding: "15px",
-                    borderRadius: "4px",
-                    overflow: "auto",
-                    maxHeight: "500px",
-                    fontSize: "12px",
-                  }}
-                >
-                  {JSON.stringify(currentRfp.structured_data, null, 2)}
-                </pre>
+                {isUpdatingRfp ? (
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      minHeight: "200px",
+                    }}
+                  >
+                    <CircularProgress />
+                  </Box>
+                ) : (
+                  <pre
+                    style={{
+                      background: "#f5f5f5",
+                      padding: "15px",
+                      borderRadius: "4px",
+                      overflow: "auto",
+                      maxHeight: "500px",
+                      fontSize: "12px",
+                    }}
+                  >
+                    {JSON.stringify(currentRfp.structured_data, null, 2)}
+                  </pre>
+                )}
               </Paper>
             </Grid>
 
@@ -472,7 +701,18 @@ export default function CreateRfpPage() {
                 <Typography variant="h6" gutterBottom>
                   Email Preview
                 </Typography>
-                {emailPreview ? (
+                {isUpdatingRfp ? (
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      minHeight: "200px",
+                    }}
+                  >
+                    <CircularProgress />
+                  </Box>
+                ) : emailPreview ? (
                   <Box>
                     <Typography
                       variant="subtitle2"
@@ -494,7 +734,16 @@ export default function CreateRfpPage() {
                     />
                   </Box>
                 ) : (
-                  <CircularProgress size={24} />
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "center",
+                      alignItems: "center",
+                      minHeight: "200px",
+                    }}
+                  >
+                    <CircularProgress />
+                  </Box>
                 )}
               </Paper>
             </Grid>

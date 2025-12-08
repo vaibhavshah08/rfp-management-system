@@ -14,26 +14,44 @@ export class RfpService {
     private aiService: AiService,
   ) {}
 
-  async create(createRfpDto: CreateRfpDto): Promise<Rfp> {
+  async create(createRfpDto: CreateRfpDto, is_draft: boolean = false): Promise<Rfp> {
     const description = createRfpDto.description.trim();
     
     if (!description) {
       throw new BadRequestException('Description cannot be empty');
     }
 
-    const structured_data = await this.aiService.generateStructuredRfp(description);
+    let structured_data;
+    if (is_draft) {
+      structured_data = {
+        budget: null,
+        budget_currency: null,
+        budget_per_unit: null,
+        items: [],
+        quantities: {},
+        delivery_timeline: null,
+        payment_terms: null,
+        warranty: null,
+        special_requests: null,
+        category: null,
+        metadata: null,
+      };
+    } else {
+      structured_data = await this.aiService.generateStructuredRfp(description);
 
-    const is_valid = this.validateStructuredData(structured_data);
-    
-    if (!is_valid) {
-      throw new BadRequestException(
-        'The description provided is not detailed enough to create a valid RFP. Please provide more specific information including: items/products needed, quantities, budget, delivery timeline, payment terms, or warranty requirements.',
-      );
+      const is_valid = this.validateStructuredData(structured_data);
+      
+      if (!is_valid) {
+        throw new BadRequestException(
+          'The description provided is not detailed enough to create a valid RFP. Please provide more specific information including: items/products needed, quantities, budget, delivery timeline, payment terms, or warranty requirements.',
+        );
+      }
     }
 
     const rfp = this.rfpRepository.create({
       description_raw: description,
       structured_data: structured_data,
+      is_draft: is_draft,
     });
 
     return this.rfpRepository.save(rfp);
@@ -76,7 +94,15 @@ export class RfpService {
 
   async findAll(): Promise<Rfp[]> {
     return this.rfpRepository.find({
+      where: { is_draft: false },
       relations: ['proposals', 'proposals.vendor'],
+      order: { created_at: 'DESC' },
+    });
+  }
+
+  async findAllDrafts(): Promise<Rfp[]> {
+    return this.rfpRepository.find({
+      where: { is_draft: true },
       order: { created_at: 'DESC' },
     });
   }
@@ -94,31 +120,103 @@ export class RfpService {
     return rfp;
   }
 
-  async update(id: string, updateRfpDto: UpdateRfpDto): Promise<Rfp> {
-    const rfp = await this.findOne(id);
+  async update(id: string, updateRfpDto: UpdateRfpDto, is_draft: boolean | null = null): Promise<Rfp> {
+    const rfp = await this.rfpRepository.findOne({ where: { id } });
 
-    if (updateRfpDto.description) {
+    if (!rfp) {
+      throw new NotFoundException(`RFP with ID ${id} not found`);
+    }
+
+    if (updateRfpDto.description !== undefined) {
       const description = updateRfpDto.description.trim();
       
       if (!description) {
         throw new BadRequestException('Description cannot be empty');
       }
 
-      const structured_data = await this.aiService.generateStructuredRfp(description);
-      
-      const is_valid = this.validateStructuredData(structured_data);
-      
-      if (!is_valid) {
-        throw new BadRequestException(
-          'The description provided is not detailed enough to create a valid RFP. Please provide more specific information including: items/products needed, quantities, budget, delivery timeline, payment terms, or warranty requirements.',
-        );
-      }
+      const has_existing_structured_data = rfp.structured_data && (
+        (rfp.structured_data.budget !== null && rfp.structured_data.budget !== undefined) ||
+        (rfp.structured_data.items && Array.isArray(rfp.structured_data.items) && rfp.structured_data.items.length > 0) ||
+        (rfp.structured_data.delivery_timeline && rfp.structured_data.delivery_timeline.trim().length > 0) ||
+        (rfp.structured_data.payment_terms && rfp.structured_data.payment_terms.trim().length > 0) ||
+        (rfp.structured_data.warranty && rfp.structured_data.warranty.trim().length > 0)
+      );
 
-      rfp.description_raw = description;
-      rfp.structured_data = structured_data as typeof rfp.structured_data;
+      if (rfp.is_draft && has_existing_structured_data) {
+        const structured_data = await this.aiService.generateStructuredRfp(description);
+        
+        const is_valid = this.validateStructuredData(structured_data);
+        
+        if (!is_valid) {
+          throw new BadRequestException(
+            'The description provided is not detailed enough to create a valid RFP. Please provide more specific information including: items/products needed, quantities, budget, delivery timeline, payment terms, or warranty requirements.',
+          );
+        }
+
+        rfp.description_raw = description;
+        rfp.structured_data = structured_data as typeof rfp.structured_data;
+      } else if (rfp.is_draft || is_draft === true) {
+        rfp.description_raw = description;
+      } else {
+        const structured_data = await this.aiService.generateStructuredRfp(description);
+        
+        const is_valid = this.validateStructuredData(structured_data);
+        
+        if (!is_valid) {
+          throw new BadRequestException(
+            'The description provided is not detailed enough to create a valid RFP. Please provide more specific information including: items/products needed, quantities, budget, delivery timeline, payment terms, or warranty requirements.',
+          );
+        }
+
+        rfp.description_raw = description;
+        rfp.structured_data = structured_data as typeof rfp.structured_data;
+      }
+    }
+
+    if (is_draft !== null) {
+      rfp.is_draft = is_draft;
     }
 
     return this.rfpRepository.save(rfp);
+  }
+
+  async convertDraftToRfp(id: string, description?: string): Promise<Rfp> {
+    const rfp = await this.rfpRepository.findOne({ where: { id, is_draft: true } });
+
+    if (!rfp) {
+      throw new NotFoundException(`Draft with ID ${id} not found`);
+    }
+
+    if (description) {
+      const trimmed = description.trim();
+      if (trimmed) {
+        rfp.description_raw = trimmed;
+        await this.rfpRepository.save(rfp);
+      }
+    }
+
+    const structured_data = await this.aiService.generateStructuredRfp(rfp.description_raw);
+    
+    const is_valid = this.validateStructuredData(structured_data);
+    
+    if (!is_valid) {
+      throw new BadRequestException(
+        'The description provided is not detailed enough to create a valid RFP. Please provide more specific information including: items/products needed, quantities, budget, delivery timeline, payment terms, or warranty requirements.',
+      );
+    }
+    
+    rfp.structured_data = structured_data as typeof rfp.structured_data;
+    rfp.is_draft = true;
+
+    return this.rfpRepository.save(rfp);
+  }
+
+  async markDraftAsSent(id: string): Promise<void> {
+    const rfp = await this.rfpRepository.findOne({ where: { id, is_draft: true } });
+    if (rfp) {
+      rfp.is_draft = false;
+      await this.rfpRepository.save(rfp);
+    }
   }
 
   async remove(id: string): Promise<void> {

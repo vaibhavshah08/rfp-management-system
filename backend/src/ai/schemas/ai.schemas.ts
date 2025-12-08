@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 export const RfpStructureSchema = z.object({
   budget: z.number().nullable(),
+  budget_currency: z.string().nullable().optional(),
+  budget_per_unit: z.number().nullable().optional(),
   items: z.array(
     z.object({
       name: z.string(),
@@ -13,6 +15,7 @@ export const RfpStructureSchema = z.object({
   delivery_timeline: z.string().nullable(),
   payment_terms: z.string().nullable(),
   warranty: z.string().nullable(),
+  special_requests: z.string().nullable().optional(),
   category: z.string().nullable().optional(),
   metadata: z.record(z.string(), z.any()).nullable().optional(),
 });

@@ -1,8 +1,11 @@
 export interface Rfp {
   id: string;
   description_raw: string;
+  is_draft?: boolean;
   structured_data: {
     budget?: number;
+    budget_currency?: string;
+    budget_per_unit?: number;
     items?: Array<{
       name: string;
       quantity: number;
@@ -12,6 +15,7 @@ export interface Rfp {
     delivery_timeline?: string;
     payment_terms?: string;
     warranty?: string;
+    special_requests?: string;
     category?: string;
     metadata?: Record<string, any>;
   };

@@ -10,6 +10,7 @@ import {
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { RfpService } from './rfp.service';
 import { CreateRfpDto } from './dto/create-rfp.dto';
+import { CreateDraftDto } from './dto/create-draft.dto';
 import { UpdateRfpDto } from './dto/update-rfp.dto';
 import { SendRfpDto } from './dto/send-rfp.dto';
 import { EmailService } from '../email/email.service';
@@ -33,6 +34,34 @@ export class RfpController {
   @ApiOperation({ summary: 'Get all RFPs' })
   findAll() {
     return this.rfpService.findAll();
+  }
+
+  @Get('drafts')
+  @ApiOperation({ summary: 'Get all draft RFPs' })
+  findAllDrafts() {
+    return this.rfpService.findAllDrafts();
+  }
+
+  @Post('drafts')
+  @ApiOperation({ summary: 'Create a new RFP draft' })
+  @ApiResponse({ status: 201, description: 'Draft created successfully' })
+  createDraft(@Body() createDraftDto: CreateDraftDto) {
+    return this.rfpService.create(createDraftDto, true);
+  }
+
+  @Post(':id/convert-to-rfp')
+  @ApiOperation({
+    summary: 'Convert draft to RFP by generating structured data',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Draft converted to RFP successfully',
+  })
+  convertDraftToRfp(
+    @Param('id') id: string,
+    @Body() body?: { description?: string },
+  ) {
+    return this.rfpService.convertDraftToRfp(id, body?.description);
   }
 
   @Get(':id')
@@ -65,7 +94,9 @@ export class RfpController {
   @ApiResponse({ status: 200, description: 'RFP regenerated successfully' })
   async regenerate(@Param('id') id: string) {
     const rfp = await this.rfpService.findOne(id);
-    const structured_data = await this.rfpService.regenerateStructuredData(rfp.id);
+    const structured_data = await this.rfpService.regenerateStructuredData(
+      rfp.id,
+    );
     return { ...rfp, structured_data: structured_data };
   }
 
@@ -77,5 +108,3 @@ export class RfpController {
     return await this.emailService.generateEmailPreview(rfp);
   }
 }
-
-

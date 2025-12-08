@@ -20,6 +20,13 @@ export const rfpApi = {
     api.post(`/rfps/${id}/send`, { vendor_ids }),
   regenerate: (id: string) => api.post(`/rfps/${id}/regenerate`),
   getEmailPreview: (id: string) => api.get(`/rfps/${id}/email-preview`),
+  getAllDrafts: () => api.get("/rfps/drafts"),
+  createDraft: (data: { description: string }) =>
+    api.post("/rfps/drafts", data),
+  updateDraft: (id: string, data: { description?: string }) =>
+    api.patch(`/rfps/${id}`, data),
+  convertDraftToRfp: (id: string, description?: string) =>
+    api.post(`/rfps/${id}/convert-to-rfp`, description ? { description } : {}),
 };
 
 export const vendorApi = {

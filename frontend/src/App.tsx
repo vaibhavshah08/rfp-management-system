@@ -13,7 +13,7 @@ import {
   Toolbar,
   Typography,
 } from '@mui/material';
-import { Create as CreateIcon, Business as BusinessIcon, Home as HomeIcon, Send as SendIcon, Inbox as InboxIcon } from '@mui/icons-material';
+import { Create as CreateIcon, Business as BusinessIcon, Home as HomeIcon, Send as SendIcon, Inbox as InboxIcon, Description as DraftIcon } from '@mui/icons-material';
 
 import CreateRfpPage from './pages/CreateRfpPage';
 import VendorListPage from './pages/VendorListPage';
@@ -22,6 +22,7 @@ import ProposalComparisonPage from './pages/ProposalComparisonPage';
 import LandingPage from './pages/LandingPage';
 import SentProposalsPage from './pages/SentProposalsPage';
 import ReceivedProposalsPage from './pages/ReceivedProposalsPage';
+import DraftsPage from './pages/DraftsPage';
 
 const queryClient = new QueryClient();
 
@@ -45,6 +46,7 @@ function AppContent() {
   const menuItems = [
     { text: 'Home', icon: <HomeIcon />, path: '/home' },
     { text: 'Create RFP', icon: <CreateIcon />, path: '/' },
+    { text: 'Drafts', icon: <DraftIcon />, path: '/drafts' },
     { text: 'Vendors', icon: <BusinessIcon />, path: '/vendors' },
     { text: 'Sent Proposals', icon: <SendIcon />, path: '/sent-proposals' },
     { text: 'Received Proposals', icon: <InboxIcon />, path: '/received-proposals' },
@@ -146,6 +148,7 @@ function AppContent() {
           <Routes location={location}>
             <Route path="/home" element={<LandingPage />} />
             <Route path="/" element={<CreateRfpPage />} />
+            <Route path="/drafts" element={<DraftsPage />} />
             <Route path="/vendors" element={<VendorListPage />} />
             <Route path="/sent-proposals" element={<SentProposalsPage />} />
             <Route path="/received-proposals" element={<ReceivedProposalsPage />} />
