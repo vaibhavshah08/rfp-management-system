@@ -106,10 +106,8 @@ This system automates the entire workflow using AI, ensuring consistency, reduci
 - **Google Gemini API Key** - Get one at https://aistudio.google.com/apikey
 - **Email Credentials** (for SMTP sending):
   - Gmail: Enable 2-Step Verification and create an App Password
-  - SendGrid/Mailgun: Use provided API keys or SMTP credentials
 - **IMAP Credentials** (for receiving vendor replies):
   - Gmail: Use the same App Password as SMTP
-  - Other providers: Use appropriate IMAP credentials
 
 ### Installation Steps
 
@@ -275,11 +273,7 @@ npm run seed
 
 This creates:
 
-- **3 sample vendors** (Tech Solutions Inc., Global Supplies Co., Premium Services Ltd.)
-- **1 sample RFP** (laptop procurement)
-- **2 sample proposals** (from different vendors)
-
-Use this to quickly test the comparison feature or see how data is structured. You can run it multiple times (it checks for existing data).
+- **3 sample vendors** (Tech Solutions Inc., Global Supplies Co., Premium Services Ltd.) (Please update your email id to recieve emails or add vendors via UI)
 
 ### Running Everything Locally
 
